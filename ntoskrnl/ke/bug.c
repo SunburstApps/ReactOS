@@ -736,7 +736,7 @@ KiDisplayStackBacktrace()
     /* If count of stack backtrace lines is less than MaximumLines number so let's split it in two columns */
     if (KiStackBacktraceLen < MaximumLines)
         ColumnMax = KiStackBacktraceLen / 2;
-    else /* If it's more than possible to display, let's split in two columnts but as maximum as possible */
+    else /* If it's more than possible to display, let's split in two columnts but as much as possible */
         ColumnMax = MaximumLines;
 
     for (Iteration = 0; Iteration < KiStackBacktraceLen; Iteration++)
@@ -750,7 +750,7 @@ KiDisplayStackBacktrace()
         /* Get text about item in 2nd column */
         KiFormatStackBacktrace(ColumnMax + Iteration, AnsiBuffer2, sizeof(AnsiBuffer2));
             
-        /* Format it to show both outputs on one line */    
+        /* Show both outputs on one line */    
         RtlStringCbPrintfA(AnsiBuffer, sizeof(AnsiBuffer), "%s  %s", AnsiBuffer, AnsiBuffer2);
 
         InbvDisplayString("\r\n");
