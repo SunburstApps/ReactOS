@@ -1061,6 +1061,15 @@ ThemeWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, WNDPROC DefWndPr
             return DefWndProc(hWnd, Msg, wParam, lParam);
         }
     }
+    case WM_THEMECHANGED:
+    {
+        if ((GetWindowLongPtr(hWnd, GWL_STYLE) & WS_CAPTION) == WS_CAPTION)
+        {
+            DrawMenuBar(hWnd);
+        }
+
+        return 0;
+    }
     default:
         return DefWndProc(hWnd, Msg, wParam, lParam);
     }
