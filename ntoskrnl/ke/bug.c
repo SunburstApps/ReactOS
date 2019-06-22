@@ -705,25 +705,26 @@ VOID
 NTAPI
 KiDoStackBacktrace()
 {
-    PVOID *Frame, *NextFrame;
-    
+    ULONG_PTR Frames[32];
+    ULONG RealFrameCount;
+    ULONG FrameCount;
+    ULONG FrameIndex;
+    PVOID* Frame;
+
+    FrameCount = 32;
+    RealFrameCount = RtlCaptureStackBackTrace(2, FrameCount, Frames, NULL);
     KiStackBacktraceLen = 0;
- 
-    NextFrame = _AddressOfReturnAddress();
-    NextFrame--;
-    do
+
+    for (FrameIndex = 0; FrameIndex < RealFrameCount; FrameIndex++)
     {
-        Frame = NextFrame;
-        NextFrame = Frame[0];
-        
-        KiStackBacktrace[KiStackBacktraceLen].Frame = NextFrame;
-        KiStackBacktrace[KiStackBacktraceLen].FramePc = Frame[1];
-        KiStackBacktrace[KiStackBacktraceLen].NextFrame = Frame[0];
-        
+        Frame = Frames[FrameIndex];
+
+        KiStackBacktrace[KiStackBacktraceLen].Frame = Frame;
+        KiStackBacktrace[KiStackBacktraceLen].FramePc = Frame;
+        KiStackBacktrace[KiStackBacktraceLen].NextFrame = NULL;
+
         KiStackBacktraceLen++;
-    } 
-    while ((ULONG_PTR)NextFrame > (ULONG_PTR)Frame &&
-           (ULONG_PTR)NextFrame < (ULONG_PTR)Frame + 4 * PAGE_SIZE);
+    }
 }
 
 VOID
