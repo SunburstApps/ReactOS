@@ -136,7 +136,6 @@ typedef struct _BACKTRACE_INFO
 {
     PVOID *Frame;
     PVOID *FramePc;
-    PVOID *NextFrame;
 } BACKTRACE_INFO, *PBACKTRACE_INFO;
 
 #ifndef _WIN64

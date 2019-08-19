@@ -721,7 +721,6 @@ KiDoStackBacktrace()
 
         KiStackBacktrace[KiStackBacktraceLen].Frame = Frame;
         KiStackBacktrace[KiStackBacktraceLen].FramePc = Frame;
-        KiStackBacktrace[KiStackBacktraceLen].NextFrame = NULL;
 
         KiStackBacktraceLen++;
     }
