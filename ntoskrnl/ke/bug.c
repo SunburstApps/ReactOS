@@ -757,12 +757,14 @@ KiDisplayStackBacktrace()
         InbvDisplayString(AnsiBuffer);
     }
 
-    RtlStringCbPrintfA(AnsiBuffer,
-                       sizeof(AnsiBuffer),
-                       "\r\n%2d --------------------------------------------------------\r\n",
-                       KiStackBacktraceLen - 1);
+    if ((KiStackBacktraceLen - MaximumLines) > 0) {
+        RtlStringCbPrintfA(AnsiBuffer,
+            sizeof(AnsiBuffer),
+            "\r\n%2d more frames --------------------------------------------\r\n",
+            KiStackBacktraceLen - MaximumLines);
 
-    InbvDisplayString(AnsiBuffer);
+        InbvDisplayString(AnsiBuffer);
+    }
 }
 
 VOID
