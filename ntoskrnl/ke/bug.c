@@ -757,7 +757,7 @@ KiDisplayStackBacktrace()
         InbvDisplayString(AnsiBuffer);
     }
 
-    if ((KiStackBacktraceLen - MaximumLines) > 0) {
+    if (KiStackBacktraceLen > MaximumLines) {
         RtlStringCbPrintfA(AnsiBuffer,
             sizeof(AnsiBuffer),
             "\r\n%2d more frames --------------------------------------------\r\n",
