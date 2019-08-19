@@ -712,7 +712,7 @@ KiDoStackBacktrace()
     PVOID* Frame;
 
     FrameCount = 32;
-    RealFrameCount = RtlCaptureStackBackTrace(2, FrameCount, (void **)Frames, NULL);
+    RealFrameCount = RtlCaptureStackBackTrace(1, FrameCount, (void **)Frames, NULL);
     KiStackBacktraceLen = 0;
 
     for (FrameIndex = 0; FrameIndex < RealFrameCount; FrameIndex++)
