@@ -16,6 +16,14 @@
 #pragma alloc_text(INIT, KiInitializeBugCheck)
 #endif
 
+/* TYPES *********************************************************************/
+
+typedef struct _BACKTRACE_INFO
+{
+    PVOID Frame;
+    PVOID FramePc;
+} BACKTRACE_INFO, *PBACKTRACE_INFO;
+
 /* GLOBALS *******************************************************************/
 
 LIST_ENTRY KeBugcheckCallbackListHead;
@@ -705,19 +713,19 @@ VOID
 NTAPI
 KiDoStackBacktrace()
 {
-    ULONG_PTR Frames[32];
+    PVOID Frames[32];
     ULONG RealFrameCount;
     ULONG FrameCount;
     ULONG FrameIndex;
-    PVOID* Frame;
+    PVOID Frame;
 
     FrameCount = 32;
-    RealFrameCount = RtlCaptureStackBackTrace(1, FrameCount, (void **)Frames, NULL);
+    RealFrameCount = RtlCaptureStackBackTrace(1, FrameCount, Frames, NULL);
     KiStackBacktraceLen = 0;
 
     for (FrameIndex = 0; FrameIndex < RealFrameCount; FrameIndex++)
     {
-        Frame = (PVOID*)Frames[FrameIndex];
+        Frame = Frames[FrameIndex];
 
         KiStackBacktrace[KiStackBacktraceLen].Frame = Frame;
         KiStackBacktrace[KiStackBacktraceLen].FramePc = Frame;
