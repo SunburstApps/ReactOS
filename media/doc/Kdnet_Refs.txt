@@ -1,7 +1,6 @@
 References I used while implementing the KDNET protocol are as follows:
 
 * https://github.com/Lekensteyn/kdnet
-* https://github.com/killvxk/libKDNET
 * https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/setting-up-a-network-debugging-connection
 * Files from Enterprise WDK ISO image
   * Program Files\Windows Kits\10\Debuggers\ddk\samples\kdnet\docs\DevelopingKDNETExtensibilityModules.mht
