@@ -1,0 +1,11 @@
+References I used while implementing the KDNET protocol are as follows:
+
+* https://github.com/Lekensteyn/kdnet
+* https://github.com/killvxk/libKDNET
+* https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/setting-up-a-network-debugging-connection
+* Files from Enterprise WDK ISO image
+  * Program Files\Windows Kits\10\Debuggers\ddk\samples\kdnet\docs\DevelopingKDNETExtensibilityModules.mht
+  * Download the ISO here: https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk#enterprise-wdk-for-windows-10-version-1903-ewdk
+
+The kdnet transport drivers (kd_??_????.dll) were adapted from the
+device driver code already in ReactOS. All code in kdnet.dll is my own.
