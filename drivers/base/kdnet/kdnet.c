@@ -228,7 +228,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
                 // If there were no valid base-36 digits, then the key is not valid, and we can't continue.
                 return STATUS_INVALID_PARAMETER;
 
-            RtlCopyMemory(EncryptionKey, Base36Value, sizeof(Base36Value));
+            RtlCopyMemory(EncryptionKey, &Base36Value, sizeof(Base36Value));
             KeyString += (FragmentPtr - KeyString);
             if (*KeyString != '.') return STATUS_INVALID_PARAMETER;
             KeyString++;
@@ -242,7 +242,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
                 // If there were no valid base-36 digits, then the key is not valid, and we can't continue.
                 return STATUS_INVALID_PARAMETER;
 
-            RtlCopyMemory(EncryptionKey + sizeof(Base36Value), Base36Value, sizeof(Base36Value));
+            RtlCopyMemory(EncryptionKey + sizeof(Base36Value), &Base36Value, sizeof(Base36Value));
             KeyString += (FragmentPtr - KeyString);
             if (*KeyString != '.') return STATUS_INVALID_PARAMETER;
             KeyString++;
@@ -256,7 +256,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
                 // If there were no valid base-36 digits, then the key is not valid, and we can't continue.
                 return STATUS_INVALID_PARAMETER;
 
-            RtlCopyMemory(EncryptionKey + sizeof(Base36Value) * 2, Base36Value, sizeof(Base36Value));
+            RtlCopyMemory(EncryptionKey + sizeof(Base36Value) * 2, &Base36Value, sizeof(Base36Value));
             KeyString += (FragmentPtr - KeyString);
             if (*KeyString != '.') return STATUS_INVALID_PARAMETER;
             KeyString++;
@@ -270,7 +270,7 @@ KdDebuggerInitialize0(IN PLOADER_PARAMETER_BLOCK LoaderBlock OPTIONAL)
                 // If there were no valid base-36 digits, then the key is not valid, and we can't continue.
                 return STATUS_INVALID_PARAMETER;
 
-            RtlCopyMemory(EncryptionKey + sizeof(Base36Value) * 3, Base36Value, sizeof(Base36Value));
+            RtlCopyMemory(EncryptionKey + sizeof(Base36Value) * 3, &Base36Value, sizeof(Base36Value));
 
             // TODO: Store the completed EncryptionKey.
         }
