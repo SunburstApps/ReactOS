@@ -81,6 +81,12 @@ else()
     set(_WINKD_ FALSE CACHE BOOL "Whether to compile with the KD protocol.")
 endif()
 
+if(KDBG)
+    message(STATUS "Using ReactOS integrated kernel debugger")
+elseif(_WINKD_)
+    message(STATUS "Using KD debug protocol")
+endif()
+
 set(_ELF_ FALSE CACHE BOOL
 "Whether to compile support for ELF files.
 Do not enable unless you know what you're doing.")
