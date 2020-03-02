@@ -52,7 +52,14 @@ endif()
 
 if(ENABLE_WINKD AND ENABLE_KDBG)
     message(FATAL_ERROR "ENABLE_WINKD and ENABLE_KDBG are mutually exclusive")
-elseif(ENABLE_WINKD)
+endif()
+
+if(NOT ENABLE_WINKD AND NOT ENABLE_KDBG)
+    # Use classic KDBG by default.
+    set(ENABLE_KDBG TRUE)
+endif()
+
+if(ENABLE_WINKD)
     set(_WINKD_ TRUE CACHE BOOL "Whether to compile with the KD protocol.")
     set(KDBG FALSE CACHE BOOL "Whether to compile in the integrated kernel debugger.")
 elseif(ENABLE_KDBG)
