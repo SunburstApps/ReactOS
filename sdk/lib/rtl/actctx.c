@@ -1100,7 +1100,7 @@ static WCHAR *LookupXMLNamespace(PXML_TAG tag, WCHAR *xmlns_prefix)
     else return NULL;
 }
 
-static BOOL CompareXMLNamespace(PXML_TAG tag, WCHAR *xmlns, WCHAR *expected_xmlns)
+static BOOL CompareXMLNamespace(WCHAR *xmlns, WCHAR *expected_xmlns)
 {
     if (wcscmp(xmlns, expected_xmlns)) return FALSE;
 
