@@ -729,7 +729,16 @@ static WCHAR *strndupW(const WCHAR *str, INT length)
     return strncpyW(ptr, str, length);
 }
 
+static WCHAR *skip_to_charset(WCHAR *input, const WCHAR *charset)
+{
+    INT offset;
+
+    offset = strspnW(input, charset);
+    return input + offset;
+}
+
 #define MAX_ATTRIBUTES 64
+#define MAX_CHILDREN   128
 
 typedef struct
 {
@@ -739,7 +748,6 @@ typedef struct
 
 typedef struct tagXML_TAG
 {
-    struct tagXML_TAG *parent;
     WCHAR *name;
     WCHAR *ns_prefix;
     WCHAR *text_content;
@@ -747,16 +755,15 @@ typedef struct tagXML_TAG
     INT namespace_count;
     STRING_PAIR attributes[MAX_ATTRIBUTES];
     INT attribute_count;
+    struct tagXML_TAG *children[MAX_CHILDREN];
+    INT child_count;
 } XML_TAG, *PXML_TAG;
 
-static PXML_TAG AllocXMLTag(WCHAR *name, PXML_TAG parent)
+static PXML_TAG AllocXMLTag(void)
 {
     PXML_TAG tag = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(XML_TAG));
     if (tag == NULL) return NULL;
     RtlZeroMemory(&tag, sizeof(XML_TAG));
-
-    tag->parent = parent;
-    tag->name = strdupW(name);
     return tag;
 }
 
@@ -776,10 +783,279 @@ static void FreeXMLTag(PXML_TAG tag)
         RtlFreeHeap(RtlGetProcessHeap(), 0, tag->attributes[i].value);
     }
 
+    if (tag->child_count != 0)
+    {
+        for (i = 0; i < tag->child_count; i++)
+        {
+            FreeXMLTag(tag->children[i]);
+        }
+
+        RtlFreeHeap(RtlGetProcessHeap(), 0, tag->children);
+    }
+
     if (tag->ns_prefix != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, tag->ns_prefix);
     if (tag->text_content != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, tag->text_content);
     RtlFreeHeap(RtlGetProcessHeap(), 0, tag->name);
     RtlFreeHeap(RtlGetProcessHeap(), 0, tag);
+}
+
+static void SkipXMLWhitespace(WCHAR **input_buffer)
+{
+    WCHAR *buffer;
+    buffer = *input_buffer;
+
+    if (buffer[0] == '\0') return;
+
+    while (buffer[0] == ' ' || buffer[0] == '\t' || buffer[0] == '\r' || buffer[0] == '\n')
+    {
+        buffer++;
+        if (buffer[0] == '\0') break;
+    }
+
+    *input_buffer = buffer;
+}
+
+static void SkipXMLComment(WCHAR **input_buffer)
+{
+    WCHAR *buffer;
+    buffer = *input_buffer;
+
+    if (strncmpW(buffer, L"<!--", 4) == 0)
+    {
+        input_buffer += 4;
+
+        while (buffer[0] != '\0' && buffer[1] != '\0' && buffer[2] != '\0')
+        {
+            if (strncmpW(buffer, L"-->", 3) == 0)
+            {
+                input_buffer += 3;
+                break;
+            }
+
+            input_buffer += 3;
+        }
+    }
+
+    *input_buffer = buffer;
+}
+
+static void SkipXMLCommentOrWhitespace(WCHAR **ptr)
+{
+    SkipXMLWhitespace(ptr);
+    SkipXMLComment(ptr);
+    SkipXMLWhitespace(ptr);
+}
+
+static void ParseXMLAttribute(WCHAR **buffer_ptr, PXML_TAG tag)
+{
+    WCHAR *buffer = *buffer_ptr;
+    WCHAR *end_ptr;
+    WCHAR *name = NULL;
+    WCHAR *ending_quote = L"";
+
+    SkipXMLWhitespace(&buffer);
+    if (buffer[0] == '>') goto done;
+
+    end_ptr = skip_to_charset(buffer, L"=>");
+    if (end_ptr[0] == '\0' || end_ptr[0] == '>') goto done;
+
+    name = strndupW(buffer, buffer - end_ptr);
+    buffer = end_ptr + 1;
+
+    SkipXMLWhitespace(&buffer);
+    if (end_ptr[0] != '=') goto fail;
+    SkipXMLWhitespace(&buffer);
+
+    if (end_ptr[0] == '\'') ending_quote = L"'";
+    else if (end_ptr[0] == '"') ending_quote  = L"\"";
+    else goto fail;
+
+    buffer = end_ptr + 1;
+    end_ptr = skip_to_charset(buffer, ending_quote);
+    if (end_ptr[0] != ending_quote[0]) goto fail;
+
+    if (strncmpW(name, L"xmlns", 5) == 0)
+    {
+        if (name[5] == ':')
+        {
+            INT count = tag->namespace_count;
+            if (count == MAX_ATTRIBUTES - 1)
+            {
+                DPRINT("Too many XML namespaces\n");
+                goto fail;
+            }
+
+            tag->namespaces[count].name = strdupW(&name[6]);
+            tag->namespaces[count].value = strndupW(buffer, end_ptr - buffer);
+            tag->namespace_count++;
+        }
+        else
+        {
+            INT count = tag->namespace_count;
+            if (count == MAX_ATTRIBUTES - 1)
+            {
+                DPRINT("Too many XML namespaces\n");
+                goto fail;
+            }
+
+            tag->namespaces[count].name = strdupW(L"");
+            tag->namespaces[count].value = strndupW(buffer, end_ptr - buffer);
+            tag->namespace_count++;
+        }
+    }
+    else
+    {
+        INT count = tag->attribute_count;
+        if (count == MAX_ATTRIBUTES - 1)
+        {
+            DPRINT("Too many XML attributes\n");
+            goto fail;
+        }
+
+        tag->namespaces[count].name = strdupW(name);
+        tag->namespaces[count].value = strndupW(buffer, end_ptr - buffer);
+        tag->namespace_count++;
+    }
+
+    buffer = ending_quote + 1;
+
+done:
+    *buffer_ptr = buffer;
+    return;
+
+fail:
+    if (end_ptr[0] != '\0')
+    {
+        // Skip to the end of the string, so that the caller knows there's a failure.
+        buffer = skip_to_charset(buffer, L"");
+    }
+
+    goto done;
+}
+
+static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr)
+{
+    WCHAR *buffer = *buffer_ptr;
+    WCHAR *end_ptr;
+    PXML_TAG tag;
+
+    tag = AllocXMLTag();
+    SkipXMLCommentOrWhitespace(&buffer);
+    if (buffer[0] != '<') goto fail;
+    buffer++;
+
+    end_ptr = skip_to_charset(buffer, L":> ");
+    if (end_ptr[0] == '\0') goto fail;
+
+    if (end_ptr[0] == ':')
+    {
+        tag->ns_prefix = strndupW(buffer, end_ptr - buffer);
+        buffer = end_ptr + 1;
+
+        end_ptr = skip_to_charset(buffer, L"> ");
+        if (end_ptr[0] == '\0') goto fail;
+
+        tag->name = strndupW(buffer, end_ptr - buffer);
+        buffer = end_ptr + 1;
+    }
+    else
+    {
+        tag->ns_prefix = NULL;
+        tag->name = strndupW(buffer, end_ptr - buffer);
+        buffer = end_ptr + 1;
+    }
+
+    SkipXMLWhitespace(&buffer);
+    if (buffer[0] == '\0') goto fail;
+
+    while (buffer[0] != '>' && buffer[0] != '\0')
+    {
+        ParseXMLAttribute(&buffer, tag);
+    }
+
+    SkipXMLWhitespace(&buffer);
+    if (buffer[0] == '/' && buffer[1] == '>')
+    {
+        buffer += 2;
+        goto done;
+    }
+
+    if (buffer[0] != '>') goto fail;
+    buffer++; // skip closing >
+    SkipXMLCommentOrWhitespace(&buffer);
+
+    while (buffer[0] != '\0')
+    {
+        if (buffer[0] == '<' && buffer[1] == '/')
+        {
+            end_ptr = skip_to_charset(buffer, L">");
+            if (strncmpW(buffer, tag->name, end_ptr - buffer) != 0)
+                goto fail;
+
+            buffer = end_ptr + 1;
+            break;
+        }
+        else
+        {
+            PXML_TAG child_tag;
+
+            if (tag->child_count == MAX_CHILDREN - 1)
+            {
+                DPRINT1("Too many child elements\n");
+                goto fail;
+            }
+
+            child_tag = ParseXMLTag(&buffer);
+            tag->children[tag->child_count++] = child_tag;
+        }
+    }
+
+done:
+    *buffer_ptr = buffer;
+    return tag;
+
+fail:
+    FreeXMLTag(tag);
+    *buffer_ptr = buffer;
+    return NULL;
+}
+
+static PXML_TAG ParseXMLDocument(WCHAR *input_buffer)
+{
+    WCHAR *buffer = input_buffer;
+    PXML_TAG root_tag;
+
+    if (strncmpW(buffer, L"<?xml", 5) == 0)
+    {
+        DPRINT("Found \"<?xml\" header\n");
+        buffer += 5;
+
+        while (buffer[0] != '\0' && buffer[1] != '\0')
+        {
+            if (buffer[0] == '?' && buffer[1] == '>')
+            {
+                buffer += 2;
+                break;
+            }
+
+            buffer += 2;
+        }
+    }
+
+    SkipXMLCommentOrWhitespace(&buffer);
+    if (buffer[0] != '<') goto fail;
+
+    root_tag = ParseXMLTag(&buffer);
+    if (root_tag == NULL) goto fail;
+
+    SkipXMLCommentOrWhitespace(&buffer);
+    if (buffer[0] != '\0') goto fail;
+
+    return root_tag;
+
+fail:
+    if (root_tag != NULL) FreeXMLTag(root_tag);
+    return NULL;
 }
 
 static WCHAR *xmlstrdupW(const xmlstr_t* str)
