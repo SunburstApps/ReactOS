@@ -742,6 +742,7 @@ typedef struct tagXML_TAG
     struct tagXML_TAG *parent;
     WCHAR *name;
     WCHAR *ns_prefix;
+    WCHAR *text_content;
     STRING_PAIR namespaces[MAX_ATTRIBUTES];
     INT namespace_count;
     STRING_PAIR attributes[MAX_ATTRIBUTES];
@@ -776,6 +777,7 @@ static void FreeXMLTag(PXML_TAG tag)
     }
 
     if (tag->ns_prefix != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, tag->ns_prefix);
+    if (tag->text_content != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, tag->text_content);
     RtlFreeHeap(RtlGetProcessHeap(), 0, tag->name);
     RtlFreeHeap(RtlGetProcessHeap(), 0, tag);
 }
