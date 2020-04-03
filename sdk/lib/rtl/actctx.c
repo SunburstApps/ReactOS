@@ -721,6 +721,65 @@ static WCHAR *strdupW(const WCHAR* str)
     return strcpyW(ptr, str);
 }
 
+static WCHAR *strndupW(const WCHAR *str, INT length)
+{
+    WCHAR *ptr;
+    if (!(ptr = RtlAllocateHeap(RtlGetProcessHeap(), 0, (length + 1) * sizeof(WCHAR))))
+        return NULL;
+    return strncpyW(ptr, str, length);
+}
+
+#define MAX_ATTRIBUTES 64
+
+typedef struct
+{
+    WCHAR *name;
+    WCHAR *value;
+} STRING_PAIR;
+
+typedef struct tagXML_TAG
+{
+    struct tagXML_TAG *parent;
+    WCHAR *name;
+    WCHAR *ns_prefix;
+    STRING_PAIR namespaces[MAX_ATTRIBUTES];
+    INT namespace_count;
+    STRING_PAIR attributes[MAX_ATTRIBUTES];
+    INT attribute_count;
+} XML_TAG, *PXML_TAG;
+
+static PXML_TAG AllocXMLTag(WCHAR *name, PXML_TAG parent)
+{
+    PXML_TAG tag = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(XML_TAG));
+    if (tag == NULL) return NULL;
+    RtlZeroMemory(&tag, sizeof(XML_TAG));
+
+    tag->parent = parent;
+    tag->name = strdupW(name);
+    return tag;
+}
+
+static void FreeXMLTag(PXML_TAG tag)
+{
+    INT i;
+
+    for (i = 0; i < tag->namespace_count; i++)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, tag->namespaces[i].name);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, tag->namespaces[i].value);
+    }
+
+    for (i = 0; i < tag->attribute_count; i++)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, tag->attributes[i].name);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, tag->attributes[i].value);
+    }
+
+    if (tag->ns_prefix != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, tag->ns_prefix);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, tag->name);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, tag);
+}
+
 static WCHAR *xmlstrdupW(const xmlstr_t* str)
 {
     WCHAR *strW;
