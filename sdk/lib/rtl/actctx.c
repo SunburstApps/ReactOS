@@ -748,6 +748,7 @@ typedef struct
 
 typedef struct tagXML_TAG
 {
+    struct tagXML_TAG *parent;
     WCHAR *name;
     WCHAR *ns_prefix;
     WCHAR *text_content;
@@ -933,13 +934,15 @@ fail:
     goto done;
 }
 
-static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr)
+static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
 {
     WCHAR *buffer = *buffer_ptr;
     WCHAR *end_ptr;
     PXML_TAG tag;
 
     tag = AllocXMLTag();
+    tag->parent = parent_tag;
+
     SkipXMLCommentOrWhitespace(&buffer);
     if (buffer[0] != '<') goto fail;
     buffer++;
@@ -1005,7 +1008,7 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr)
                 goto fail;
             }
 
-            child_tag = ParseXMLTag(&buffer);
+            child_tag = ParseXMLTag(&buffer, tag);
             tag->children[tag->child_count++] = child_tag;
         }
     }
@@ -1045,7 +1048,7 @@ static PXML_TAG ParseXMLDocument(WCHAR *input_buffer)
     SkipXMLCommentOrWhitespace(&buffer);
     if (buffer[0] != '<') goto fail;
 
-    root_tag = ParseXMLTag(&buffer);
+    root_tag = ParseXMLTag(&buffer, NULL);
     if (root_tag == NULL) goto fail;
 
     SkipXMLCommentOrWhitespace(&buffer);
