@@ -1620,22 +1620,6 @@ static BOOL next_xml_elem(xmlbuf_t* xmlbuf, xmlstr_t* elem)
     return xmlbuf->ptr != xmlbuf->end;
 }
 
-static BOOL parse_xml_header(xmlbuf_t* xmlbuf)
-{
-    /* FIXME: parse attributes */
-    const WCHAR *ptr;
-
-    for (ptr = xmlbuf->ptr; ptr < xmlbuf->end - 1; ptr++)
-    {
-        if (ptr[0] == '?' && ptr[1] == '>')
-        {
-            xmlbuf->ptr = ptr + 2;
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-
 static BOOL parse_text_content(xmlbuf_t* xmlbuf, xmlstr_t* content)
 {
     const WCHAR *ptr = memchrW(xmlbuf->ptr, '<', xmlbuf->end - xmlbuf->ptr);
@@ -3070,46 +3054,6 @@ static BOOL parse_assembly_elem(xmlbuf_t* xmlbuf, struct actctx_loader* acl,
     return ret;
 }
 
-static NTSTATUS parse_manifest_buffer( struct actctx_loader* acl, struct assembly *assembly,
-                                       struct assembly_identity* ai, xmlbuf_t *xmlbuf )
-{
-    xmlstr_t elem;
-    UNICODE_STRING elemU;
-
-    if (!next_xml_elem(xmlbuf, &elem)) return STATUS_SXS_CANT_GEN_ACTCTX;
-
-    if (xmlstr_cmp(&elem, g_xmlW) &&
-        (!parse_xml_header(xmlbuf) || !next_xml_elem(xmlbuf, &elem)))
-        return STATUS_SXS_CANT_GEN_ACTCTX;
-
-    if (!xml_elem_cmp(&elem, assemblyW, asmv1W))
-    {
-        elemU = xmlstr2unicode(&elem);
-        DPRINT1("root element is %wZ, not <assembly>\n", &elemU);
-        return STATUS_SXS_CANT_GEN_ACTCTX;
-    }
-
-    if (!parse_assembly_elem(xmlbuf, acl, assembly, ai))
-    {
-        DPRINT1("failed to parse manifest %S\n", assembly->manifest.info );
-        return STATUS_SXS_CANT_GEN_ACTCTX;
-    }
-
-    if (next_xml_elem(xmlbuf, &elem))
-    {
-        elemU = xmlstr2unicode(&elem);
-        DPRINT1("unexpected element %wZ\n", &elemU);
-        return STATUS_SXS_CANT_GEN_ACTCTX;
-    }
-
-    if (xmlbuf->ptr != xmlbuf->end)
-    {
-        DPRINT1("parse error\n");
-        return STATUS_SXS_CANT_GEN_ACTCTX;
-    }
-    return STATUS_SUCCESS;
-}
-
 static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_identity* ai,
                                 LPCWSTR filename, LPCWSTR directory, BOOL shared,
                                 const void *buffer, SIZE_T size )
@@ -3134,30 +3078,36 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
     unicode_tests = IS_TEXT_UNICODE_SIGNATURE | IS_TEXT_UNICODE_REVERSE_SIGNATURE;
     if (RtlIsTextUnicode(buffer, size, &unicode_tests ))
     {
-        xmlbuf.ptr = buffer;
-        xmlbuf.end = xmlbuf.ptr + size / sizeof(WCHAR);
-        status = parse_manifest_buffer( acl, assembly, ai, &xmlbuf );
+        WCHAR* ptr = strndupW(buffer, size);
+        PXML_TAG root_tag = ParseXMLDocument(ptr);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, ptr);
+
+        if (root_tag == NULL) return STATUS_SXS_CANT_GEN_ACTCTX;
+        parse_assembly_elem(root_tag, acl, assembly, ai);
     }
     else if (unicode_tests & IS_TEXT_UNICODE_REVERSE_SIGNATURE)
     {
         const WCHAR *buf = buffer;
         WCHAR *new_buff;
         unsigned int i;
+        PXML_TAG root_tag;
 
         if (!(new_buff = RtlAllocateHeap( RtlGetProcessHeap(), 0, size )))
             return STATUS_NO_MEMORY;
         for (i = 0; i < size / sizeof(WCHAR); i++)
             new_buff[i] = RtlUshortByteSwap( buf[i] );
-        xmlbuf.ptr = new_buff;
-        xmlbuf.end = xmlbuf.ptr + size / sizeof(WCHAR);
-        status = parse_manifest_buffer( acl, assembly, ai, &xmlbuf );
-        RtlFreeHeap( RtlGetProcessHeap(), 0, new_buff );
+
+        root_tag = ParseXMLDocument(new_buff);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, new_buff);
+
+        if (root_tag == NULL) return STATUS_SXS_CANT_GEN_ACTCTX;
     }
     else
     {
         /* TODO: this doesn't handle arbitrary encodings */
         WCHAR *new_buff;
         ULONG sizeU;
+        PXML_TAG root_tag;
 
         status = RtlMultiByteToUnicodeSize(&sizeU, buffer, size);
         if (!NT_SUCCESS(status))
@@ -3179,8 +3129,10 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
 
         xmlbuf.ptr = new_buff;
         xmlbuf.end = xmlbuf.ptr + sizeU / sizeof(WCHAR);
-        status = parse_manifest_buffer(acl, assembly, ai, &xmlbuf);
+        root_tag = ParseXMLDocument(new_buff);
         RtlFreeHeap(RtlGetProcessHeap(), 0, new_buff);
+
+        if (root_tag == NULL) return STATUS_SXS_CANT_GEN_ACTCTX;
     }
     return status;
 }
