@@ -9,7 +9,7 @@
  *                  Jacek Caban for CodeWeavers
  *                  Alexandre Julliard
  *                  Stefan Ginsberg (stefan.ginsberg@reactos.org)
- *                  Samuel Serapión
+ *                  Samuel Serapiï¿½n
  */
 
 /* Based on Wine 3.2-37c98396 */
@@ -3572,7 +3572,7 @@ static struct string_index *find_string_index(const struct strsection_header *se
         {
             const WCHAR *nameW = (WCHAR*)((BYTE*)section + iter->name_offset);
 
-            if (!_wcsnicmp(nameW, name->Buffer, name->Length / sizeof(WCHAR)) && 
+            if (!_wcsnicmp(nameW, name->Buffer, name->Length / sizeof(WCHAR)) &&
                 wcslen(nameW) == name->Length / sizeof(WCHAR))
             {
                 index = iter;
@@ -5714,7 +5714,7 @@ RtlpFindActivationContextSection_CheckParameters( ULONG flags, const GUID *guid,
                                                   const UNICODE_STRING *section_name, PACTCTX_SECTION_KEYED_DATA data )
 {
     /* Check general parameter combinations */
-    if (!section_name ||  !section_name->Buffer || 
+    if (!section_name ||  !section_name->Buffer ||
         (flags & ~FIND_ACTCTX_VALID_MASK) ||
         ((flags & FIND_ACTCTX_VALID_MASK) && !data) ||
         (data && data->cbSize < offsetof(ACTCTX_SECTION_KEYED_DATA, ulAssemblyRosterIndex)))
