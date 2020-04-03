@@ -743,8 +743,9 @@ static WCHAR *skip_to_charset(WCHAR *input, const WCHAR *charset)
 typedef struct
 {
     WCHAR *name;
+    WCHAR *ns_prefix; // NULL if this is in the 'namespaces' array
     WCHAR *value;
-} STRING_PAIR;
+} ATTRIBUTE;
 
 typedef struct tagXML_TAG
 {
@@ -752,9 +753,9 @@ typedef struct tagXML_TAG
     WCHAR *name;
     WCHAR *ns_prefix;
     WCHAR *text_content;
-    STRING_PAIR namespaces[MAX_ATTRIBUTES];
+    ATTRIBUTE namespaces[MAX_ATTRIBUTES];
     INT namespace_count;
-    STRING_PAIR attributes[MAX_ATTRIBUTES];
+    ATTRIBUTE attributes[MAX_ATTRIBUTES];
     INT attribute_count;
     struct tagXML_TAG *children[MAX_CHILDREN];
     INT child_count;
@@ -906,16 +907,28 @@ static void ParseXMLAttribute(WCHAR **buffer_ptr, PXML_TAG tag)
     }
     else
     {
+        WCHAR *colon;
         INT count = tag->attribute_count;
+
         if (count == MAX_ATTRIBUTES - 1)
         {
             DPRINT("Too many XML attributes\n");
             goto fail;
         }
 
-        tag->namespaces[count].name = strdupW(name);
-        tag->namespaces[count].value = strndupW(buffer, end_ptr - buffer);
-        tag->namespace_count++;
+        colon = skip_to_charset(name, L":");
+        if (colon[0] != '\0')
+        {
+            tag->namespaces[count].ns_prefix = strndupW(name, colon - name);
+            tag->namespaces[count].name = strdupW(colon + 1);
+            tag->namespace_count++;
+        }
+        else
+        {
+            tag->namespaces[count].name = strdupW(name);
+            tag->namespaces[count].value = strndupW(buffer, end_ptr - buffer);
+            tag->namespace_count++;
+        }
     }
 
     buffer = ending_quote + 1;
