@@ -1073,6 +1073,43 @@ static WCHAR *xmlstrdupW(const xmlstr_t* str)
     return strW;
 }
 
+static WCHAR *LookupXMLNamespace(PXML_TAG tag, WCHAR *xmlns_prefix)
+{
+    INT i;
+
+    for (i = 0; i < tag->namespace_count; i++)
+    {
+        if (!wcscmp(xmlns_prefix, tag->namespaces[i].name))
+            return tag->namespaces[i].value;
+    }
+
+    if (tag->parent != NULL) return LookupXMLNamespace(tag->parent, xmlns_prefix);
+    else return NULL;
+}
+
+static inline BOOL CompareXMLTagName(PXML_TAG tag, WCHAR *expected_tag_name, WCHAR *expected_xmlns)
+{
+    if (!wcscmp(tag->name, expected_tag_name)) return TRUE;
+    if (tag->ns_prefix != NULL && wcscmp(tag->ns_prefix, L""))
+    {
+        WCHAR *xmlns = LookupXMLNamespace(tag, tag->ns_prefix);
+
+        if (wcscmp(xmlns, expected_xmlns)) return FALSE;
+
+        if (!wcscmp(expected_xmlns, L"urn:schemas-microsoft-com:asm.v1"))
+        {
+            if (!wcscmp(xmlns, L"urn:schemas-microsoft-com:asm.v2")) return TRUE;
+            if (!wcscmp(xmlns, L"urn:schemas-microsoft-com:asm.v3")) return TRUE;
+        }
+        else if (!wcscmp(xmlns, L"urn:schemas-microsoft-com:asm.v2"))
+        {
+            if (!wcscmp(xmlns, L"urn:schemas-microsoft-com:asm.v3")) return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 static inline BOOL xmlstr_cmp(const xmlstr_t* xmlstr, const WCHAR *str)
 {
     return !strncmpW(xmlstr->ptr, str, xmlstr->len) && !str[xmlstr->len];
