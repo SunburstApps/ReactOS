@@ -2528,21 +2528,21 @@ static BOOL parse_clr_surrogate_elem(struct assembly* assembly, struct actctx_lo
     {
         ATTRIBUTE *attr = &tag->attributes[i];
 
-        if (CompareXMLAttributeName(tag, L"name", L"urn:schemas-microsoft-com:asm.v1"))
+        if (CompareXMLAttributeName(tag, attr, L"name", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (!(entity->u.clrsurrogate.name = strdupW(attr->value))) return FALSE;
         }
-        else if (CompareXMLAttributeName(tag, L"clsid", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLAttributeName(tag, attr, L"clsid", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (!(entity->u.clrsurrogate.clsid = strdupW(attr->value))) return FALSE;
         }
-        else if (CompareXMLAttributeName(tag, L"runtimeVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLAttributeName(tag, attr, L"runtimeVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (!(entity->u.clrsurrogate.version = strdupW(attr->value))) return FALSE;
         }
         else
         {
-            WARN("Unknown attribute %S:%S\n", attr->ns_prefix, attr->value);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, attr->value);
         }
     }
 
@@ -2556,7 +2556,7 @@ static BOOL parse_dependent_assembly_elem(struct actctx_loader* acl, BOOL option
     BOOL ret = FALSE, delayed = FALSE;
     INT i;
 
-    for (i = 0; i < tag->attribute_count, i++)
+    for (i = 0; i < tag->attribute_count; i++)
     {
         ATTRIBUTE *attr = &tag->attributes[i];
 
@@ -2566,7 +2566,7 @@ static BOOL parse_dependent_assembly_elem(struct actctx_loader* acl, BOOL option
         }
         else
         {
-            WARN("Unknown attribute %S:%S\n", attr->ns_prefix, attr->value);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, attr->value);
         }
     }
 
@@ -2574,7 +2574,7 @@ static BOOL parse_dependent_assembly_elem(struct actctx_loader* acl, BOOL option
     ai.optional = optional;
     ai.delayed = delayed;
 
-    if (tag->child_count == 0 || !CompareXMLElementName(tag->children[0], L"assemblyIdentity", L"urn:schemas-microsoft-com:asm.v1"))
+    if (tag->child_count == 0 || !CompareXMLTagName(tag->children[0], L"assemblyIdentity", L"urn:schemas-microsoft-com:asm.v1"))
         return FALSE;
 
     if (!parse_assembly_identity_elem(acl->actctx, &ai, tag->children[0]))
@@ -2595,7 +2595,7 @@ static BOOL parse_dependent_assembly_elem(struct actctx_loader* acl, BOOL option
         }
         else
         {
-            WARN(L"Unknown element %S:%S\n", tag->ns_prefix, tag->name);
+            DPRINT("Unknown element %S:%S\n", tag->ns_prefix, tag->name);
         }
     }
 
@@ -2618,7 +2618,7 @@ static BOOL parse_dependency_elem(struct actctx_loader* acl, PXML_TAG tag)
         }
         else
         {
-            WARN("Unknown attribute %S:%S=\"%S\"\n", attr->ns_prefix, attr->name, attr->value);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
@@ -2632,7 +2632,7 @@ static BOOL parse_dependency_elem(struct actctx_loader* acl, PXML_TAG tag)
         }
         else
         {
-            WARN("Unknown element %S:%S\n", child->ns_prefix, child->name);
+            DPRINT("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2672,12 +2672,12 @@ static BOOL parse_file_elem(struct assembly* assembly, struct actctx_loader* acl
         }
         else if (CompareXMLAttributeName(tag, attr, L"hashalg~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (wcsicmp(attr->value, "SHA1"))
+            if (wcsicmp(attr->value, L"SHA1"))
                 DPRINT1("hashalg should be SHA1, got %S\n", attr->value);
         }
         else
         {
-            WARN("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
@@ -2711,7 +2711,7 @@ static BOOL parse_file_elem(struct assembly* assembly, struct actctx_loader* acl
         }
         else
         {
-            WARN("Unknown element %S:%S\n", child->ns_prefix, child->name);
+            DPRINT("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2747,7 +2747,7 @@ static BOOL parse_supportedos_elem(struct assembly *assembly, struct actctx_load
         }
         else
         {
-            WARN("Unknown attribute %S:%S\n", attr->ns_prefix, ns->name);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, ns->name);
         }
     }
 
@@ -2774,7 +2774,7 @@ static BOOL parse_compatibility_application_elem(struct assembly* assembly, stru
         }
         else
         {
-            WARN("Unknown element %S:%S\n", child->ns_prefix, child->name);
+            DPRINT("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2796,7 +2796,7 @@ static BOOL parse_compatibility_elem(struct assembly* assembly, struct actctx_lo
         }
         else
         {
-            WARN("Unknown element %S:%S\n", child->ns_prefix, child->name);
+            DPRINT("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2817,32 +2817,32 @@ static BOOL parse_requested_execution_level_elem(struct assembly* assembly, stru
 
         if (CompareXMLAttributeName(tag, attr, L"level", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!wcscmp(attr.value, L"asInvoker"))
+            if (!wcscmp(attr->value, L"asInvoker"))
                 assembly->run_level = ACTCTX_RUN_LEVEL_AS_INVOKER;
-            else if (!wcscmp(attr.value, L"highestAvailable"))
+            else if (!wcscmp(attr->value, L"highestAvailable"))
                 assembly->run_level = ACTCTX_RUN_LEVEL_HIGHEST_AVAILABLE;
-            else if (!wcscmp(attr.value, L"requireAdministrator"))
+            else if (!wcscmp(attr->value, L"requireAdministrator"))
                 assembly->run_level = ACTCTX_RUN_LEVEL_REQUIRE_ADMIN;
             else
                 FIXME("Unknown execution level %S", attr->value);
         }
         else if (CompareXMLAttributeName(tag, attr, L"uiAccess", "urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!wcsicmp(attr.value, L"false"))
+            if (!wcsicmp(attr->value, L"false"))
                 assembly->ui_access = FALSE;
-            else if (!wcsicmp(attr.value, L"true"))
+            else if (!wcsicmp(attr->value, L"true"))
                 assembly->ui_access = TRUE;
             else
                 FIXME("Unknown uiAccess value %S\n", attr->value);
         }
         else
         {
-            WARN("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
     if (tag->child_count > 0)
-        WARN("requestedExecutionLevel tag should not have children\n");
+        DPRINT("requestedExecutionLevel tag should not have children\n");
 
     return TRUE;
 }
@@ -2862,7 +2862,7 @@ static BOOL parse_requested_privileges_elem(struct assembly* assembly, struct ac
         }
         else
         {
-            WARN("Unknown element %S:%S\n", child->ns_prefix, child->name);
+            DPRINT("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2884,7 +2884,7 @@ static BOOL parse_security_elem(struct assembly *assembly, struct actctx_loader 
         }
         else
         {
-            WARN("Unknown element %S:%S", child->ns_prefix, child->name);
+            DPRINT("Unknown element %S:%S", child->ns_prefix, child->name);
         }
     }
 
@@ -2906,7 +2906,7 @@ static BOOL parse_trust_info_elem(struct assembly *assembly, struct actctx_loade
         }
         else
         {
-            WARN("Unknown element %S:%S", child->ns_prefix, child->name);\
+            DPRINT("Unknown element %S:%S", child->ns_prefix, child->name);\
         }
     }
 
@@ -2924,7 +2924,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
 
     for (i = 0; i < tag->attribute_count; i++)
     {
-        if (CompareXMLAttributeName(tag, tag, &tag->attributes[i], L"manifestVersion", L"urn:schemas-microsoft-com:asm.v1"))
+        if (CompareXMLAttributeName(tag, &tag->attributes[i], L"manifestVersion", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (wcscmp(tag->attributes[i].value, L"1.0")) return FALSE;
         }
@@ -3012,11 +3012,11 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         }
         else
         {
-            WARN("Unknown element %S:%S\n", child->ns_prefix, child->name);
+            DPRINT1("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
-    if ((assembly->type == ASSEMBLY_MANIFEST || assembly->type == ASSEMBLY_SHARED_MANIFEST) && assembly->noInherit)
+    if ((assembly->type == ASSEMBLY_MANIFEST || assembly->type == ASSEMBLY_SHARED_MANIFEST) && assembly->no_inherit)
     {
         return FALSE;
     }
