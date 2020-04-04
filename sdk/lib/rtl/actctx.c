@@ -2738,8 +2738,8 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
                                 LPCWSTR filename, LPCWSTR directory, BOOL shared,
                                 const void *buffer, SIZE_T size )
 {
-    xmlbuf_t xmlbuf;
-    NTSTATUS status;
+    PXML_TAG root_tag;
+    NTSTATUS status = STATUS_SUCCESS;
     struct assembly *assembly;
     int unicode_tests;
 
@@ -2759,18 +2759,16 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
     if (RtlIsTextUnicode(buffer, size, &unicode_tests ))
     {
         WCHAR* ptr = strndupW(buffer, size);
-        PXML_TAG root_tag = ParseXMLDocument(ptr);
+        root_tag = ParseXMLDocument(ptr);
         RtlFreeHeap(RtlGetProcessHeap(), 0, ptr);
 
-        if (root_tag == NULL) return STATUS_SXS_CANT_GEN_ACTCTX;
-        parse_assembly_elem(root_tag, acl, assembly, ai);
+        if (root_tag == NULL) status = STATUS_SXS_CANT_GEN_ACTCTX;
     }
     else if (unicode_tests & IS_TEXT_UNICODE_REVERSE_SIGNATURE)
     {
         const WCHAR *buf = buffer;
         WCHAR *new_buff;
         unsigned int i;
-        PXML_TAG root_tag;
 
         if (!(new_buff = RtlAllocateHeap( RtlGetProcessHeap(), 0, size )))
             return STATUS_NO_MEMORY;
@@ -2780,14 +2778,13 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
         root_tag = ParseXMLDocument(new_buff);
         RtlFreeHeap(RtlGetProcessHeap(), 0, new_buff);
 
-        if (root_tag == NULL) return STATUS_SXS_CANT_GEN_ACTCTX;
+        if (root_tag == NULL) status = STATUS_SXS_CANT_GEN_ACTCTX;
     }
     else
     {
         /* TODO: this doesn't handle arbitrary encodings */
         WCHAR *new_buff;
         ULONG sizeU;
-        PXML_TAG root_tag;
 
         status = RtlMultiByteToUnicodeSize(&sizeU, buffer, size);
         if (!NT_SUCCESS(status))
@@ -2807,13 +2804,20 @@ static NTSTATUS parse_manifest( struct actctx_loader* acl, struct assembly_ident
             return STATUS_SXS_CANT_GEN_ACTCTX;
         }
 
-        xmlbuf.ptr = new_buff;
-        xmlbuf.end = xmlbuf.ptr + sizeU / sizeof(WCHAR);
         root_tag = ParseXMLDocument(new_buff);
         RtlFreeHeap(RtlGetProcessHeap(), 0, new_buff);
 
-        if (root_tag == NULL) return STATUS_SXS_CANT_GEN_ACTCTX;
+        if (root_tag == NULL) status = STATUS_SXS_CANT_GEN_ACTCTX;
     }
+
+    if (!NT_SUCCESS(status)) return status;
+
+    if (parse_assembly_elem(root_tag, acl, assembly, ai))
+        status = STATUS_SUCCESS;
+    else
+        status = STATUS_SXS_CANT_GEN_ACTCTX;
+
+    FreeXMLTag(root_tag);
     return status;
 }
 
