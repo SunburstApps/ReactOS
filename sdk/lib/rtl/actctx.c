@@ -2926,7 +2926,8 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         }
         else if (CompareXMLTagName(child, L"application", L"urn:schemas-microsoft-com:asm.v3"))
         {
-            ret = parse_application_elem(assembly, acl, child);
+            // TODO: Not implemented yet
+            // ret = parse_application_elem(assembly, acl, child);
         }
         else
         {
