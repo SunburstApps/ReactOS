@@ -1718,16 +1718,15 @@ static BOOL parse_text_content(xmlbuf_t* xmlbuf, xmlstr_t* content)
     return TRUE;
 }
 
-static BOOL parse_version(const xmlstr_t *str, struct assembly_version *version)
+static BOOL parse_version(const WCHAR *str, struct assembly_version *version)
 {
     unsigned int ver[4];
     unsigned int pos;
     const WCHAR *curr;
-    UNICODE_STRING strU;
 
     /* major.minor.build.revision */
     ver[0] = ver[1] = ver[2] = ver[3] = pos = 0;
-    for (curr = str->ptr; curr < str->ptr + str->len; curr++)
+    for (curr = str; curr[0] != '\0'; curr++)
     {
         if (*curr >= '0' && *curr <= '9')
         {
@@ -1747,8 +1746,7 @@ static BOOL parse_version(const xmlstr_t *str, struct assembly_version *version)
     return TRUE;
 
 error:
-    strU = xmlstr2unicode(str);
-    DPRINT1( "Wrong version definition in manifest file (%wZ)\n", &strU );
+    DPRINT1( "Wrong version definition in manifest file (%S)\n", str );
     return FALSE;
 }
 
@@ -1819,68 +1817,63 @@ static BOOL parse_unknown_elem(xmlbuf_t *xmlbuf, const xmlstr_t *unknown_elem)
     return ret && parse_end_element(xmlbuf);
 }
 
-static BOOL parse_assembly_identity_elem(xmlbuf_t* xmlbuf, ACTIVATION_CONTEXT* actctx,
-                                         struct assembly_identity* ai)
+static BOOL parse_assembly_identity_elem(ACTIVATION_CONTEXT* actctx, struct assembly_identity* ai, PXML_TAG tag)
 {
-    xmlstr_t    attr_name, attr_value;
-    BOOL        end = FALSE, error;
-    UNICODE_STRING  attr_valueU, attr_nameU;
+    INT i;
 
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, g_nameW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"name", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(ai->name = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(ai->name = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, typeW))
+        else if (CompareXMLAttributeName(tag, attr, L"type", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(ai->type = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(ai->type = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, versionW))
+        else if (CompareXMLAttributeName(tag, attr, L"version", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!parse_version(&attr_value, &ai->version)) return FALSE;
+            if (!parse_version(attr->value, &ai->version)) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, processorArchitectureW))
+        else if (CompareXMLAttributeName(tag, attr, L"processorArchitecture", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(ai->arch = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(ai->arch = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, publicKeyTokenW))
+        else if (CompareXMLAttributeName(tag, attr, L"publicKeyToken", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(ai->public_key = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(ai->public_key = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, languageW))
+        else if (CompareXMLAttributeName(tag, attr, L"language", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            DPRINT("Unsupported yet language attribute (%.*S)\n",
-                   attr_value.len, attr_value.ptr);
-            if (!(ai->language = xmlstrdupW(&attr_value))) return FALSE;
+            DPRINT("Language attribute not yet supported (%S)\n", attr->value);
+            if (!(ai->language = strdupW(attr->value))) return FALSE;
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
-    if (error || end) return end;
-    return parse_expect_end_elem(xmlbuf, assemblyIdentityW, asmv1W);
+    return tag->child_count == 0;
 }
 
-static enum comclass_threadingmodel parse_com_class_threadingmodel(xmlstr_t *value)
+static enum comclass_threadingmodel parse_com_class_threadingmodel(WCHAR *value)
 {
     static const WCHAR apartW[] = {'A','p','a','r','t','m','e','n','t',0};
     static const WCHAR neutralW[] = {'N','e','u','t','r','a','l',0};
     static const WCHAR freeW[] = {'F','r','e','e',0};
     static const WCHAR bothW[] = {'B','o','t','h',0};
 
-    if (value->len == 0) return ThreadingModel_No;
-    if (xmlstr_cmp(value, apartW))
+    if (strlenW(value) == 0) return ThreadingModel_No;
+    if (!strcmpW(value, apartW))
         return ThreadingModel_Apartment;
-    else if (xmlstr_cmp(value, freeW))
+    else if (!strcmpW(value, freeW))
         return ThreadingModel_Free;
-    else if (xmlstr_cmp(value, bothW))
+    else if (!strcmpW(value, bothW))
         return ThreadingModel_Both;
-    else if (xmlstr_cmp(value, neutralW))
+    else if (!strcmpW(value, neutralW))
         return ThreadingModel_Neutral;
     else
         return ThreadingModel_No;
@@ -1913,17 +1906,17 @@ static OLEMISC get_olemisc_value(const WCHAR *str, int len)
     return 0;
 }
 
-static DWORD parse_com_class_misc(const xmlstr_t *value)
+static DWORD parse_com_class_misc(const WCHAR *value)
 {
-    const WCHAR *str = value->ptr, *start;
-    DWORD flags = 0;
+    const WCHAR *str = value, *start;
+    DWORD flags = 0, len = strlenW(value);
     int i = 0;
 
     /* it's comma separated list of flags */
-    while (i < value->len)
+    while (i < len)
     {
         start = str;
-        while (*str != ',' && (i++ < value->len)) str++;
+        while (*str != ',' && (i++ < len)) str++;
 
         flags |= get_olemisc_value(start, str-start);
 
@@ -1935,7 +1928,7 @@ static DWORD parse_com_class_misc(const xmlstr_t *value)
     return flags;
 }
 
-static BOOL com_class_add_progid(const xmlstr_t *progid, struct entity *entity)
+static BOOL com_class_add_progid(const WCHAR *progid, struct entity *entity)
 {
     struct progids *progids = &entity->u.comclass.progids;
 
@@ -1954,108 +1947,93 @@ static BOOL com_class_add_progid(const xmlstr_t *progid, struct entity *entity)
         progids->progids = new_progids;
     }
 
-    if (!(progids->progids[progids->num] = xmlstrdupW(progid))) return FALSE;
+    if (!(progids->progids[progids->num] = strdupW(progid))) return FALSE;
     progids->num++;
 
     return TRUE;
 }
 
-static BOOL parse_com_class_progid(xmlbuf_t* xmlbuf, struct entity *entity)
+static BOOL parse_com_class_progid(struct entity *entity, PXML_TAG tag)
 {
-    xmlstr_t content;
-    BOOL end = FALSE;
-
-    if (!parse_expect_no_attr(xmlbuf, &end) || end || !parse_text_content(xmlbuf, &content))
-        return FALSE;
-
-    if (!com_class_add_progid(&content, entity)) return FALSE;
-    return parse_expect_end_elem(xmlbuf, progidW, asmv1W);
+    if (tag->attribute_count > 0) return FALSE;
+    if (!com_class_add_progid(tag->text_content, entity)) return FALSE;
+    return tag->child_count == 0;
 }
 
-static BOOL parse_com_class_elem(xmlbuf_t* xmlbuf, struct dll_redirect* dll, struct actctx_loader *acl)
+static BOOL parse_com_class_elem(struct dll_redirect* dll, struct actctx_loader *acl, PXML_TAG tag)
 {
-    xmlstr_t elem, attr_name, attr_value;
-    BOOL ret = TRUE, end = FALSE, error;
     struct entity*      entity;
-    UNICODE_STRING  attr_valueU, attr_nameU;
+    BOOL ret = TRUE;
+    INT i;
 
     if (!(entity = add_entity(&dll->entities, ACTIVATION_CONTEXT_SECTION_COM_SERVER_REDIRECTION)))
         return FALSE;
 
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, clsidW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"clsid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.clsid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.clsid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, progidW))
+        else if (CompareXMLAttributeName(tag, attr, L"progid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.progid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.progid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, tlbidW))
+        else if (CompareXMLAttributeName(tag, attr, L"tlbid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.tlbid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.tlbid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, threadingmodelW))
+        else if (CompareXMLAttributeName(tag, attr, L"threadingModel", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.model = parse_com_class_threadingmodel(&attr_value);
+            entity->u.comclass.model = parse_com_class_threadingmodel(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, miscstatusW))
+        else if (CompareXMLAttributeName(tag, attr, L"miscStatus", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.miscstatus = parse_com_class_misc(&attr_value);
+            entity->u.comclass.miscstatus = parse_com_class_misc(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, miscstatuscontentW))
+        else if (CompareXMLAttributeName(tag, attr, L"miscStatusContent", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.miscstatuscontent = parse_com_class_misc(&attr_value);
+            entity->u.comclass.miscstatuscontent = parse_com_class_misc(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, miscstatusthumbnailW))
+        else if (CompareXMLAttributeName(tag, attr, L"miscStatusThumbnail", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.miscstatusthumbnail = parse_com_class_misc(&attr_value);
+            entity->u.comclass.miscstatusthumbnail = parse_com_class_misc(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, miscstatusiconW))
+        else if (CompareXMLAttributeName(tag, attr, L"miscStatusIcon", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.miscstatusicon = parse_com_class_misc(&attr_value);
+            entity->u.comclass.miscstatusicon = parse_com_class_misc(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, miscstatusdocprintW))
+        else if (CompareXMLAttributeName(tag, attr, L"miscStatusDocPrint", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.miscstatusdocprint = parse_com_class_misc(&attr_value);
+            entity->u.comclass.miscstatusdocprint = parse_com_class_misc(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, descriptionW))
+        else if (CompareXMLAttributeName(tag, attr, L"description", L"urn:schemas-microsoft-com:asm.v1"))
         {
             /* not stored */
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
-
-    if (error) return FALSE;
 
     acl->actctx->sections |= SERVERREDIRECT_SECTION;
     if (entity->u.comclass.progid)
         acl->actctx->sections |= PROGIDREDIRECT_SECTION;
 
-    if (end) return TRUE;
-
-    while (ret && (ret = next_xml_elem(xmlbuf, &elem)))
+    for (i = 0; i < tag->child_count; i++)
     {
-        if (xmlstr_cmp_end(&elem, comClassW))
+        PXML_TAG child = tag->children[i];
+
+        if (CompareXMLTagName(child, L"progid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            ret = parse_end_element(xmlbuf);
-            break;
-        }
-        else if (xmlstr_cmp(&elem, progidW))
-        {
-            ret = parse_com_class_progid(xmlbuf, entity);
+            ret = parse_com_class_progid(entity, child);
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&elem);
-            DPRINT1("unknown elem %wZ\n", &attr_nameU);
-            ret = parse_unknown_elem(xmlbuf, &elem);
+            DPRINT1("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2065,19 +2043,18 @@ static BOOL parse_com_class_elem(xmlbuf_t* xmlbuf, struct dll_redirect* dll, str
     return ret;
 }
 
-static BOOL parse_nummethods(const xmlstr_t *str, struct entity *entity)
+static BOOL parse_nummethods(const WCHAR *str, struct entity *entity)
 {
     const WCHAR *curr;
     ULONG num = 0;
 
-    for (curr = str->ptr; curr < str->ptr + str->len; curr++)
+    for (curr = str; curr[0] != '\0'; curr++)
     {
         if (*curr >= '0' && *curr <= '9')
             num = num * 10 + *curr - '0';
         else
         {
-            UNICODE_STRING strU = xmlstr2unicode(str);
-            DPRINT1("wrong numeric value %wZ\n", &strU);
+            DPRINT1("wrong numeric value %S\n", str);
             return FALSE;
         }
     }
@@ -2086,85 +2063,84 @@ static BOOL parse_nummethods(const xmlstr_t *str, struct entity *entity)
     return TRUE;
 }
 
-static BOOL parse_cominterface_proxy_stub_elem(xmlbuf_t* xmlbuf, struct dll_redirect* dll, struct actctx_loader* acl)
+static BOOL parse_cominterface_proxy_stub_elem(struct dll_redirect* dll, struct actctx_loader* acl, PXML_TAG tag)
 {
-    xmlstr_t    attr_name, attr_value;
-    BOOL        end = FALSE, error;
     struct entity*      entity;
-    UNICODE_STRING  attr_valueU, attr_nameU;
+    INT i;
 
     if (!(entity = add_entity(&dll->entities, ACTIVATION_CONTEXT_SECTION_COM_INTERFACE_REDIRECTION)))
         return FALSE;
 
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, iidW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"iid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.iid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.iid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, g_nameW))
+        else if (CompareXMLAttributeName(tag, attr, L"name", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.name = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.name = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, baseInterfaceW))
+        else if (CompareXMLAttributeName(tag, attr, L"baseInterface", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.base = xmlstrdupW(&attr_value))) return FALSE;
-            entity->u.ifaceps.mask |= BaseIface;
+            if (!(entity->u.ifaceps.base = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, nummethodsW))
+        else if (CompareXMLAttributeName(tag, attr, L"numMethods", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(parse_nummethods(&attr_value, entity))) return FALSE;
+            if (!(parse_nummethods(attr->value, entity))) return FALSE;
             entity->u.ifaceps.mask |= NumMethods;
         }
-        else if (xmlstr_cmp(&attr_name, tlbidW))
+        else if (CompareXMLAttributeName(tag, attr, L"tlbid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.tlib = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.tlib = strdupW(attr->value))) return FALSE;
         }
-        /* not used */
-        else if (xmlstr_cmp(&attr_name, proxyStubClsid32W) || xmlstr_cmp(&attr_name, threadingmodelW))
+        else if (CompareXMLAttributeName(tag, attr, L"proxyStubClsid32", L"urn:schemas-microsoft-com:asm.v1"))
         {
+            /* not used */
+        }
+        else if (CompareXMLAttributeName(tag, attr, L"threadingModel", L"urn:schemas-microsoft-com:asm.v1"))
+        {
+            /* also not used */
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
-    if (error) return FALSE;
     acl->actctx->sections |= IFACEREDIRECT_SECTION;
-    if (end) return TRUE;
 
-    return parse_expect_end_elem(xmlbuf, comInterfaceProxyStubW, asmv1W);
+    return tag->child_count == 0;
 }
 
-static BOOL parse_typelib_flags(const xmlstr_t *value, struct entity *entity)
+static BOOL parse_typelib_flags(const WCHAR *value, struct entity *entity)
 {
     WORD *flags = &entity->u.typelib.flags;
-    const WCHAR *str = value->ptr, *start;
-    int i = 0;
+    const WCHAR *str = value, *start;
+    DWORD len = strlenW(value);
+    INT i = 0;
 
     *flags = 0;
 
     /* it's comma separated list of flags */
-    while (i < value->len)
+    while (i < len)
     {
         start = str;
-        while (*str != ',' && (i++ < value->len)) str++;
+        while (*str != ',' && (i++ < len)) str++;
 
-        if (!strncmpiW(start, restrictedW, str-start))
+        if (!strncmpiW(start, L"restricted", str-start))
             *flags |= LIBFLAG_FRESTRICTED;
-        else if (!strncmpiW(start, controlW, str-start))
+        else if (!strncmpiW(start, L"control", str-start))
             *flags |= LIBFLAG_FCONTROL;
-        else if (!strncmpiW(start, hiddenW, str-start))
+        else if (!strncmpiW(start, L"hidden", str-start))
             *flags |= LIBFLAG_FHIDDEN;
-        else if (!strncmpiW(start, hasdiskimageW, str-start))
+        else if (!strncmpiW(start, L"hasdiskimage", str-start))
             *flags |= LIBFLAG_FHASDISKIMAGE;
         else
         {
-            UNICODE_STRING valueU = xmlstr2unicode(value);
-            DPRINT1("unknown flags value %wZ\n", &valueU);
+            DPRINT1("unknown flags value %S\n", value);
             return FALSE;
         }
 
@@ -2176,16 +2152,15 @@ static BOOL parse_typelib_flags(const xmlstr_t *value, struct entity *entity)
     return TRUE;
 }
 
-static BOOL parse_typelib_version(const xmlstr_t *str, struct entity *entity)
+static BOOL parse_typelib_version(const WCHAR *str, struct entity *entity)
 {
     unsigned int ver[2];
     unsigned int pos;
     const WCHAR *curr;
-    UNICODE_STRING strW;
 
     /* major.minor */
     ver[0] = ver[1] = pos = 0;
-    for (curr = str->ptr; curr < str->ptr + str->len; curr++)
+    for (curr = str; curr[0] != '\0'; curr++)
     {
         if (*curr >= '0' && *curr <= '9')
         {
@@ -2203,54 +2178,47 @@ static BOOL parse_typelib_version(const xmlstr_t *str, struct entity *entity)
     return TRUE;
 
 error:
-    strW = xmlstr2unicode(str);
-    DPRINT1("FIXME: wrong typelib version value (%wZ)\n", &strW);
+    DPRINT1("FIXME: wrong typelib version value (%S)\n", str);
     return FALSE;
 }
 
-static BOOL parse_typelib_elem(xmlbuf_t* xmlbuf, struct dll_redirect* dll, struct actctx_loader* acl)
+static BOOL parse_typelib_elem(struct dll_redirect* dll, struct actctx_loader* acl, PXML_TAG tag)
 {
-    xmlstr_t    attr_name, attr_value;
-    BOOL        end = FALSE, error;
     struct entity*      entity;
-    UNICODE_STRING  attr_valueU, attr_nameU;
+    INT i;
 
     if (!(entity = add_entity(&dll->entities, ACTIVATION_CONTEXT_SECTION_COM_TYPE_LIBRARY_REDIRECTION)))
         return FALSE;
 
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, tlbidW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"tlbid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.typelib.tlbid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.typelib.tlbid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, versionW))
+        else if (CompareXMLAttributeName(tag, attr, L"version", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!parse_typelib_version(&attr_value, entity)) return FALSE;
+            if (!parse_typelib_version(attr->value, entity)) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, helpdirW))
+        else if (CompareXMLAttributeName(tag, attr, L"helpdir", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.typelib.helpdir = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.typelib.helpdir = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, flagsW))
+        else if (CompareXMLAttributeName(tag, attr, L"flags", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!parse_typelib_flags(&attr_value, entity)) return FALSE;
+            if (!parse_typelib_flags(attr->value, entity)) return FALSE;
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
-    if (error) return FALSE;
-
     acl->actctx->sections |= TLIBREDIRECT_SECTION;
 
-    if (end) return TRUE;
-
-    return parse_expect_end_elem(xmlbuf, typelibW, asmv1W);
+    return tag->child_count == 0;
 }
 
 static inline int aligned_string_len(int len)
@@ -2268,251 +2236,195 @@ static int get_assembly_version(struct assembly *assembly, WCHAR *ret)
     return sprintfW(ret, fmtW, ver->major, ver->minor, ver->build, ver->revision);
 }
 
-static BOOL parse_window_class_elem(xmlbuf_t* xmlbuf, struct dll_redirect* dll, struct actctx_loader* acl)
+static BOOL parse_window_class_elem(struct dll_redirect* dll, struct actctx_loader* acl, PXML_TAG tag)
 {
-    xmlstr_t elem, content, attr_name, attr_value;
-    BOOL end = FALSE, ret = TRUE, error;
     struct entity*      entity;
-    UNICODE_STRING elemU, attr_nameU, attr_valueU;
+    INT i;
 
     if (!(entity = add_entity(&dll->entities, ACTIVATION_CONTEXT_SECTION_WINDOW_CLASS_REDIRECTION)))
         return FALSE;
 
     entity->u.class.versioned = TRUE;
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, versionedW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"versioned", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (xmlstr_cmpi(&attr_value, noW))
+            if (!strcmpW(attr->value, L"no"))
                 entity->u.class.versioned = FALSE;
-            else if (!xmlstr_cmpi(&attr_value, yesW))
-               return FALSE;
+            else if (strcmpW(attr->value, L"yes"))
+                return FALSE;
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
-    if (error || end) return end;
-
-    if (!parse_text_content(xmlbuf, &content)) return FALSE;
-
-    if (!(entity->u.class.name = xmlstrdupW(&content))) return FALSE;
+    if (!(entity->u.class.name = strdupW(tag->text_content))) return FALSE;
 
     acl->actctx->sections |= WINDOWCLASS_SECTION;
 
-    while (ret && (ret = next_xml_elem(xmlbuf, &elem)))
+    for (i = 0; i < tag->child_count; i++)
     {
-        if (xmlstr_cmp_end(&elem, windowClassW))
+        DPRINT1("Unknown element %S:%S\n", tag->children[i]->ns_prefix, tag->children[i]->name);
+    }
+
+    return TRUE;
+}
+
+static BOOL parse_binding_redirect_elem(PXML_TAG tag)
+{
+    INT i;
+
+    for (i = 0; i < tag->attribute_count; i++)
+    {
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"oldVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            ret = parse_end_element(xmlbuf);
-            break;
+            DPRINT1("Not stored yet: oldVersion=%S\n", attr->value);
+        }
+        else if (CompareXMLAttributeName(tag, attr, L"newVersion", L"urn:schemas-microsoft-com:asm.v1"))
+        {
+            DPRINT1("Not stored yet: newVersion=%S\n", attr->value);
         }
         else
         {
-            elemU = xmlstr2unicode(&elem);
-            DPRINT1("unknown elem %wZ\n", &elemU);
-            ret = parse_unknown_elem(xmlbuf, &elem);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
-    return ret;
+    return tag->child_count == 0;
 }
 
-static BOOL parse_binding_redirect_elem(xmlbuf_t* xmlbuf)
+static BOOL parse_description_elem(PXML_TAG tag)
 {
-    xmlstr_t    attr_name, attr_value;
-    UNICODE_STRING  attr_valueU, attr_nameU;
-    BOOL        end = FALSE, error;
-
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    INT i;
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        attr_nameU = xmlstr2unicode(&attr_name);
-        attr_valueU = xmlstr2unicode(&attr_value);
-
-        if (xmlstr_cmp(&attr_name, oldVersionW))
-        {
-            DPRINT1("Not stored yet oldVersion=%wZ\n", &attr_valueU);
-        }
-        else if (xmlstr_cmp(&attr_name, newVersionW))
-        {
-            DPRINT1("Not stored yet newVersion=%wZ\n", &attr_valueU);
-        }
-        else
-        {
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
-        }
+        DPRINT1("Unknown attribute %S:%S\n", tag->attributes[i].ns_prefix, tag->attributes[i].name);
     }
 
-    if (error || end) return end;
-    return parse_expect_end_elem(xmlbuf, bindingRedirectW, asmv1W);
+    DPRINT("Got description %S\n", tag->text_content);
+
+    for (i = 0; i < tag->child_count; i++)
+    {
+        DPRINT1("Unkown element %S:%S\n", tag->children[i]->ns_prefix, tag->children[i]->name);
+    }
+
+    return TRUE;
 }
 
-static BOOL parse_description_elem(xmlbuf_t* xmlbuf)
+static BOOL parse_com_interface_external_proxy_stub_elem(struct assembly* assembly,
+                                                         struct actctx_loader* acl,
+                                                         PXML_TAG tag)
 {
-    xmlstr_t    elem, content, attr_name, attr_value;
-    BOOL        end = FALSE, ret = TRUE, error = FALSE;
-
-    UNICODE_STRING elem1U, elem2U;
-
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
-    {
-        elem1U = xmlstr2unicode(&attr_name);
-        elem2U = xmlstr2unicode(&attr_value);
-        DPRINT1("unknown attr %s=%s\n", &elem1U, &elem2U);
-    }
-
-    if (error) return FALSE;
-    if (end) return TRUE;
-
-    if (!parse_text_content(xmlbuf, &content))
-        return FALSE;
-
-    elem1U = xmlstr2unicode(&content);
-    DPRINT("Got description %wZ\n", &elem1U);
-
-    while (ret && (ret = next_xml_elem(xmlbuf, &elem)))
-    {
-        if (xmlstr_cmp_end(&elem, descriptionW))
-        {
-            ret = parse_end_element(xmlbuf);
-            break;
-        }
-        else
-        {
-            elem1U = xmlstr2unicode(&elem);
-            DPRINT1("unknown elem %wZ\n", &elem1U);
-            ret = parse_unknown_elem(xmlbuf, &elem);
-        }
-    }
-
-    return ret;
-}
-
-static BOOL parse_com_interface_external_proxy_stub_elem(xmlbuf_t* xmlbuf,
-                                                         struct assembly* assembly,
-                                                         struct actctx_loader* acl)
-{
-    xmlstr_t            attr_name, attr_value;
-    UNICODE_STRING      attr_nameU, attr_valueU;
-    BOOL                end = FALSE, error;
     struct entity*      entity;
+    INT i;
 
     entity = add_entity(&assembly->entities, ACTIVATION_CONTEXT_SECTION_COM_INTERFACE_REDIRECTION);
     if (!entity) return FALSE;
 
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, iidW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"iid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.iid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.iid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, g_nameW))
+        else if (CompareXMLAttributeName(tag, attr, L"name", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.name = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.name = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, baseInterfaceW))
+        else if (CompareXMLAttributeName(tag, attr, L"baseInterface", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.base = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.base = strdupW(attr->value))) return FALSE;
             entity->u.ifaceps.mask |= BaseIface;
         }
-        else if (xmlstr_cmp(&attr_name, nummethodsW))
+        else if (CompareXMLAttributeName(tag, attr, L"numMethods", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(parse_nummethods(&attr_value, entity))) return FALSE;
+            if (!parse_nummethods(attr->value, entity)) return FALSE;
             entity->u.ifaceps.mask |= NumMethods;
         }
-        else if (xmlstr_cmp(&attr_name, proxyStubClsid32W))
+        else if (CompareXMLAttributeName(tag, attr, L"proxyStubClsid32", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.ps32 = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.ps32 = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, tlbidW))
+        else if (CompareXMLAttributeName(tag, attr, L"tlbid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.ifaceps.tlib = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.ifaceps.tlib = strdupW(attr->value))) return FALSE;
         }
         else
         {
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->value);
         }
     }
 
-    if (error) return FALSE;
     acl->actctx->sections |= IFACEREDIRECT_SECTION;
-    if (end) return TRUE;
-
-    return parse_expect_end_elem(xmlbuf, comInterfaceExternalProxyStubW, asmv1W);
+    return tag->child_count == 0;
 }
 
-static BOOL parse_clr_class_elem(xmlbuf_t* xmlbuf, struct assembly* assembly, struct actctx_loader *acl)
+static BOOL parse_clr_class_elem(struct assembly* assembly, struct actctx_loader *acl, PXML_TAG tag)
 {
-    xmlstr_t    attr_name, attr_value, elem;
-    BOOL        end = FALSE, error, ret = TRUE;
+    INT i;
+    BOOL ret = TRUE;
     struct entity*      entity;
 
     entity = add_entity(&assembly->entities, ACTIVATION_CONTEXT_SECTION_COM_SERVER_REDIRECTION);
     if (!entity) return FALSE;
 
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end))
+    for (i = 0; i < tag->attribute_count; i++)
     {
-        if (xmlstr_cmp(&attr_name, g_nameW))
+        ATTRIBUTE *attr = &tag->attributes[i];
+
+        if (CompareXMLAttributeName(tag, attr, L"name", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.name = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.name = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, clsidW))
+        else if (CompareXMLAttributeName(tag, attr, L"clsid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.clsid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.clsid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, progidW))
+        else if (CompareXMLAttributeName(tag, attr, L"progid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.progid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.progid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, tlbidW))
+        else if (CompareXMLAttributeName(tag, attr, L"tlbid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.tlbid = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.tlbid = strdupW(attr->value))) return FALSE;
         }
-        else if (xmlstr_cmp(&attr_name, threadingmodelW))
+        else if (CompareXMLAttributeName(tag, attr, L"threadingmodel", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            entity->u.comclass.model = parse_com_class_threadingmodel(&attr_value);
+            entity->u.comclass.model = parse_com_class_threadingmodel(attr->value);
         }
-        else if (xmlstr_cmp(&attr_name, runtimeVersionW))
+        else if (CompareXMLAttributeName(tag, attr, L"runtimeVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            if (!(entity->u.comclass.version = xmlstrdupW(&attr_value))) return FALSE;
+            if (!(entity->u.comclass.version = strdupW(attr->value))) return FALSE;
         }
         else
         {
-            UNICODE_STRING attr_nameU, attr_valueU;
-            attr_nameU = xmlstr2unicode(&attr_name);
-            attr_valueU = xmlstr2unicode(&attr_value);
-            DPRINT1("unknown attr %wZ=%wZ\n", &attr_nameU, &attr_valueU);
+            DPRINT1("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
-    if (error) return FALSE;
     acl->actctx->sections |= SERVERREDIRECT_SECTION;
     if (entity->u.comclass.progid)
         acl->actctx->sections |= PROGIDREDIRECT_SECTION;
-    if (end) return TRUE;
 
-    while (ret && (ret = next_xml_elem(xmlbuf, &elem)))
+    for (i = 0; i < tag->child_count; i++)
     {
-        if (xmlstr_cmp_end(&elem, clrClassW))
+        PXML_TAG child = tag->children[i];
+
+        if (CompareXMLTagName(child, L"progid", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            ret = parse_end_element(xmlbuf);
-            break;
-        }
-        else if (xmlstr_cmp(&elem, progidW))
-        {
-            ret = parse_com_class_progid(xmlbuf, entity);
+            ret = parse_com_class_progid(entity, child);
         }
         else
         {
-            UNICODE_STRING elemU = xmlstr2unicode(&elem);
-            DPRINT1("unknown elem %wZ\n", &elemU);
-            ret = parse_unknown_elem(xmlbuf, &elem);
+            DPRINT1("Unknown element %S:%S\n", child->ns_prefix, child->name);
         }
     }
 
@@ -2591,7 +2503,7 @@ static BOOL parse_dependent_assembly_elem(struct actctx_loader* acl, BOOL option
     /* store the newly found identity for later loading */
     if (!add_dependent_assembly_id(acl, &ai)) return FALSE;
 
-    for (i = 1; i < tag->children_count; i++)
+    for (i = 1; i < tag->child_count; i++)
     {
         PXML_TAG child = tag->children[i];
 
@@ -2738,8 +2650,8 @@ static BOOL parse_supportedos_elem(struct assembly *assembly, struct actctx_load
             UNICODE_STRING str;
             GUID compat_id;
 
-            str.Buffer = (PWSTR)attr_value->value;
-            str.Length = str.MaximumLength = (USHORT)wcslen(attr_value->value) * sizeof(WCHAR);
+            str.Buffer = (PWSTR)attr->value;
+            str.Length = str.MaximumLength = (USHORT)wcslen(attr->value) * sizeof(WCHAR);
             if (RtlGUIDFromString(&str, &compat_id) == STATUS_SUCCESS)
             {
                 if (!(compat = add_compat_context(assembly))) return FALSE;
@@ -2753,7 +2665,7 @@ static BOOL parse_supportedos_elem(struct assembly *assembly, struct actctx_load
         }
         else
         {
-            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, ns->name);
+            DPRINT("Unknown attribute %S:%S\n", attr->ns_prefix, attr->name);
         }
     }
 
@@ -2830,16 +2742,16 @@ static BOOL parse_requested_execution_level_elem(struct assembly* assembly, stru
             else if (!wcscmp(attr->value, L"requireAdministrator"))
                 assembly->run_level = ACTCTX_RUN_LEVEL_REQUIRE_ADMIN;
             else
-                FIXME("Unknown execution level %S", attr->value);
+                DPRINT1("Unknown execution level %S\n", attr->value);
         }
-        else if (CompareXMLAttributeName(tag, attr, L"uiAccess", "urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLAttributeName(tag, attr, L"uiAccess", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (!wcsicmp(attr->value, L"false"))
                 assembly->ui_access = FALSE;
             else if (!wcsicmp(attr->value, L"true"))
                 assembly->ui_access = TRUE;
             else
-                FIXME("Unknown uiAccess value %S\n", attr->value);
+                DPRINT1("Unknown uiAccess value %S\n", attr->value);
         }
         else
         {
@@ -2947,7 +2859,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         if (assembly->type == APPLICATION_MANIFEST && CompareXMLTagName(child, L"noInherit", L"urn:schemas-microsoft-com:asm.v1"))
         {
             ret = parse_noinherit_elem(child);
-            assembly->noInherit = TRUE;
+            assembly->no_inherit = TRUE;
         }
         else if (CompareXMLTagName(child, L"noInheritable~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
@@ -2959,7 +2871,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         }
         else if (CompareXMLTagName(child, L"comInterfaceExternalProxyStub~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            ret = parse_com_interface_external_proxy_stub_elem(child, assembly, acl);
+            ret = parse_com_interface_external_proxy_stub_elem(assembly, acl, child);
         }
         else if (CompareXMLTagName(child, L"dependency", L"urn:schemas-microsoft-com:asm.v1"))
         {
@@ -2975,7 +2887,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         }
         else if (CompareXMLTagName(child, L"clrSurrogate~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
-            ret = parse_clr_surrogate_elem(assembly, acm, child);
+            ret = parse_clr_surrogate_elem(assembly, acl, child);
         }
         else if (CompareXMLTagName(child, L"trustInfo~~~", L"urn:schemas-microsoft-com:asm.v1"))
         {
@@ -2989,7 +2901,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
             {
                 if (assembly->type == APPLICATION_MANIFEST && memcmp(&assembly->id.version, &expected_ai->version, sizeof(assembly->id.version)))
                 {
-                    FIXME("wrong version for assembly manifest: %u.%u.%u.%u / %u.%u.%u.%u\n",
+                    DPRINT1("wrong version for assembly manifest: %u.%u.%u.%u / %u.%u.%u.%u\n",
                           expected_ai->version.major, expected_ai->version.minor,
                           expected_ai->version.build, expected_ai->version.revision,
                           assembly->id.version.major, assembly->id.version.minor,
@@ -3003,7 +2915,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
                           (assembly->id.version.build == expected_ai->version.build &&
                            assembly->id.version.revision < expected_ai->version.revision)))
                 {
-                    FIXME("wrong version for shared assembly manifest\n");
+                    DPRINT1("wrong version for shared assembly manifest\n");
                     return FALSE;
                 }
             }
