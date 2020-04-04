@@ -793,8 +793,6 @@ static void FreeXMLTag(PXML_TAG tag)
         {
             FreeXMLTag(tag->children[i]);
         }
-
-        RtlFreeHeap(RtlGetProcessHeap(), 0, tag->children);
     }
 
     if (tag->ns_prefix != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, tag->ns_prefix);
