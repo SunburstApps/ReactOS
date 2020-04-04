@@ -2070,7 +2070,7 @@ static BOOL parse_binding_redirect_elem(PXML_TAG tag)
     {
         ATTRIBUTE *attr = &tag->attributes[i];
 
-        if (CompareXMLAttributeName(tag, attr, L"oldVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        if (CompareXMLAttributeName(tag, attr, L"oldVersion", L"urn:schemas-microsoft-com:asm.v1"))
         {
             DPRINT1("Not stored yet: oldVersion=%S\n", attr->value);
         }
@@ -2188,7 +2188,7 @@ static BOOL parse_clr_class_elem(struct assembly* assembly, struct actctx_loader
         {
             entity->u.comclass.model = parse_com_class_threadingmodel(attr->value);
         }
-        else if (CompareXMLAttributeName(tag, attr, L"runtimeVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLAttributeName(tag, attr, L"runtimeVersion", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (!(entity->u.comclass.version = strdupW(attr->value))) return FALSE;
         }
@@ -2242,7 +2242,7 @@ static BOOL parse_clr_surrogate_elem(struct assembly* assembly, struct actctx_lo
         {
             if (!(entity->u.clrsurrogate.clsid = strdupW(attr->value))) return FALSE;
         }
-        else if (CompareXMLAttributeName(tag, attr, L"runtimeVersion~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLAttributeName(tag, attr, L"runtimeVersion", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (!(entity->u.clrsurrogate.version = strdupW(attr->value))) return FALSE;
         }
@@ -2376,7 +2376,7 @@ static BOOL parse_file_elem(struct assembly* assembly, struct actctx_loader* acl
         {
             if (!(dll->hash = strdupW(attr->value))) return FALSE;
         }
-        else if (CompareXMLAttributeName(tag, attr, L"hashalg~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLAttributeName(tag, attr, L"hashalg", L"urn:schemas-microsoft-com:asm.v1"))
         {
             if (wcsicmp(attr->value, L"SHA1"))
                 DPRINT1("hashalg should be SHA1, got %S\n", attr->value);
@@ -2474,7 +2474,7 @@ static BOOL parse_compatibility_application_elem(struct assembly* assembly, stru
     {
         PXML_TAG child = tag->children[i];
 
-        if (CompareXMLTagName(child, L"supportedOS", L"urn:schemas-microsoft-com:asm.v1"))
+        if (CompareXMLTagName(child, L"supportedOS", L"urn:schemas-microsoft-com:compatibility.v1"))
         {
             ret = parse_supportedos_elem(assembly, acl, tag);
         }
@@ -2649,7 +2649,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
             ret = parse_noinherit_elem(child);
             assembly->no_inherit = TRUE;
         }
-        else if (CompareXMLTagName(child, L"noInheritable~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLTagName(child, L"noInheritable", L"urn:schemas-microsoft-com:asm.v1"))
         {
             ret = parse_noinheritable_elem(child);
         }
@@ -2657,7 +2657,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         {
             ret = parse_description_elem(child);
         }
-        else if (CompareXMLTagName(child, L"comInterfaceExternalProxyStub~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLTagName(child, L"comInterfaceExternalProxyStub", L"urn:schemas-microsoft-com:asm.v1"))
         {
             ret = parse_com_interface_external_proxy_stub_elem(assembly, acl, child);
         }
@@ -2669,15 +2669,15 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
         {
             ret = parse_file_elem(assembly, acl, child);
         }
-        else if (CompareXMLTagName(child, L"clrClass~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLTagName(child, L"clrClass", L"urn:schemas-microsoft-com:asm.v1"))
         {
             ret = parse_clr_class_elem(assembly, acl, child);
         }
-        else if (CompareXMLTagName(child, L"clrSurrogate~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLTagName(child, L"clrSurrogate", L"urn:schemas-microsoft-com:asm.v1"))
         {
             ret = parse_clr_surrogate_elem(assembly, acl, child);
         }
-        else if (CompareXMLTagName(child, L"trustInfo~~~", L"urn:schemas-microsoft-com:asm.v1"))
+        else if (CompareXMLTagName(child, L"trustInfo", L"urn:schemas-microsoft-com:asm.v1"))
         {
             ret = parse_trust_info_elem(assembly, acl, child);
         }
@@ -2708,7 +2708,7 @@ static BOOL parse_assembly_elem(PXML_TAG tag, struct actctx_loader* acl,
                 }
             }
         }
-        else if (CompareXMLTagName(child, L"compatibility", L"compatibility-ns~~~"))
+        else if (CompareXMLTagName(child, L"compatibility", L"urn:schemas-microsoft-com:compatibility.v1"))
         {
             ret = parse_compatibility_elem(assembly, acl, child);
         }
