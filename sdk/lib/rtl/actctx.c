@@ -1131,26 +1131,28 @@ static BOOL CompareXMLNamespace(WCHAR *xmlns, WCHAR *expected_xmlns)
 
 static BOOL CompareXMLTagName(PXML_TAG tag, WCHAR *expected_tag_name, WCHAR *expected_xmlns)
 {
-    if (wcscmp(tag->name, expected_tag_name)) return FALSE;
-    if (tag->ns_prefix != NULL && wcscmp(tag->ns_prefix, L""))
-    {
-        WCHAR *xmlns = LookupXMLNamespace(tag, tag->ns_prefix);
-        return CompareXMLNamespace(xmlns, expected_xmlns);
-    }
+    WCHAR *xmlns;
 
-    return TRUE;
+    if (wcscmp(tag->name, expected_tag_name)) return FALSE;
+    if (tag->ns_prefix != NULL)
+        xmlns = LookupXMLNamespace(tag, tag->ns_prefix);
+    else
+        xmlns = LookupXMLNamespace(tag, L"");
+
+    return CompareXMLNamespace(xmlns, expected_xmlns);
 }
 
 static BOOL CompareXMLAttributeName(PXML_TAG tag, ATTRIBUTE *attribute, WCHAR *expected_name, WCHAR *expected_xmlns)
 {
+    WCHAR *xmlns;
+
     if (wcscmp(attribute->name, expected_name)) return FALSE;
     if (attribute->ns_prefix != NULL)
-    {
-        WCHAR *xmlns = LookupXMLNamespace(tag, attribute->ns_prefix);
-        return CompareXMLNamespace(xmlns, expected_xmlns);
-    }
+        xmlns = LookupXMLNamespace(tag, attribute->ns_prefix);
+    else
+        xmlns = LookupXMLNamespace(tag, L"");
 
-    return TRUE;
+    return CompareXMLNamespace(xmlns, expected_xmlns);
 }
 
 static inline BOOL xmlstr_cmp(const xmlstr_t* xmlstr, const WCHAR *str)
