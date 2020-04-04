@@ -1051,7 +1051,7 @@ fail:
 static PXML_TAG ParseXMLDocument(WCHAR *input_buffer)
 {
     WCHAR *buffer = input_buffer;
-    PXML_TAG root_tag;
+    PXML_TAG root_tag = NULL;
 
     if (strncmpW(buffer, L"<?xml", 5) == 0)
     {
@@ -2357,7 +2357,7 @@ static BOOL parse_noinheritable_elem(PXML_TAG tag)
 
 static BOOL parse_file_elem(struct assembly* assembly, struct actctx_loader* acl, PXML_TAG tag)
 {
-    BOOL error, ret = TRUE;
+    BOOL ret = TRUE;
     struct dll_redirect* dll;
     INT i;
 
@@ -2387,7 +2387,7 @@ static BOOL parse_file_elem(struct assembly* assembly, struct actctx_loader* acl
         }
     }
 
-    if (error || !dll->name) return FALSE;
+    if (!dll->name) return FALSE;
 
     acl->actctx->sections |= DLLREDIRECT_SECTION;
 
