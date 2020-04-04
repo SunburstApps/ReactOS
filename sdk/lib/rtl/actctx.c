@@ -923,6 +923,7 @@ static void ParseXMLAttribute(WCHAR **buffer_ptr, PXML_TAG tag)
         {
             tag->namespaces[count].ns_prefix = strndupW(name, colon - name);
             tag->namespaces[count].name = strdupW(colon + 1);
+            tag->namespaces[count].value = strndupW(buffer, end_ptr - buffer);
             tag->namespace_count++;
         }
         else
