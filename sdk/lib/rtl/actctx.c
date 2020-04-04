@@ -765,7 +765,7 @@ static PXML_TAG AllocXMLTag(void)
 {
     PXML_TAG tag = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(XML_TAG));
     if (tag == NULL) return NULL;
-    RtlZeroMemory(&tag, sizeof(XML_TAG));
+    RtlZeroMemory(tag, sizeof(XML_TAG));
     return tag;
 }
 
