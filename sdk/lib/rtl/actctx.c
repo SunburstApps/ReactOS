@@ -1013,16 +1013,24 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
         }
         else
         {
-            PXML_TAG child_tag;
-
-            if (tag->child_count == MAX_CHILDREN - 1)
+            if (buffer[0] == '<')
             {
-                DPRINT1("Too many child elements\n");
-                goto fail;
-            }
+                PXML_TAG child_tag;
 
-            child_tag = ParseXMLTag(&buffer, tag);
-            tag->children[tag->child_count++] = child_tag;
+                if (tag->child_count == MAX_CHILDREN - 1)
+                {
+                    DPRINT1("Too many child elements\n");
+                    goto fail;
+                }
+
+                child_tag = ParseXMLTag(&buffer, tag);
+                tag->children[tag->child_count++] = child_tag;
+            }
+            else
+            {
+                end_ptr = skip_to_charset(buffer, L"<");
+                tag->text_content = strndupW(buffer, end_ptr - buffer);
+            }
         }
     }
 
