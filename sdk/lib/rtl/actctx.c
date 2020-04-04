@@ -1086,18 +1086,6 @@ fail:
     return NULL;
 }
 
-static WCHAR *xmlstrdupW(const xmlstr_t* str)
-{
-    WCHAR *strW;
-
-    if ((strW = RtlAllocateHeap(RtlGetProcessHeap(), 0, (str->len + 1) * sizeof(WCHAR))))
-    {
-        memcpy( strW, str->ptr, str->len * sizeof(WCHAR) );
-        strW[str->len] = 0;
-    }
-    return strW;
-}
-
 static WCHAR *LookupXMLNamespace(PXML_TAG tag, WCHAR *xmlns_prefix)
 {
     INT i;
@@ -1195,16 +1183,6 @@ static inline BOOL xml_elem_cmp_end(const xmlstr_t *elem, const WCHAR *str, cons
 static inline BOOL isxmlspace( WCHAR ch )
 {
     return (ch == ' ' || ch == '\r' || ch == '\n' || ch == '\t');
-}
-
-static UNICODE_STRING xmlstr2unicode(const xmlstr_t *xmlstr)
-{
-    UNICODE_STRING res;
-
-    res.Buffer = (PWSTR)xmlstr->ptr;
-    res.Length = res.MaximumLength = (USHORT)xmlstr->len * sizeof(WCHAR);
-
-    return res;
 }
 
 static struct assembly *add_assembly(ACTIVATION_CONTEXT *actctx, enum assembly_type at)
@@ -1595,129 +1573,6 @@ static void actctx_release( ACTIVATION_CONTEXT *actctx )
     }
 }
 
-static BOOL next_xml_attr(xmlbuf_t* xmlbuf, xmlstr_t* name, xmlstr_t* value,
-                          BOOL* error, BOOL* end)
-{
-    const WCHAR* ptr;
-
-    *error = TRUE;
-
-    while (xmlbuf->ptr < xmlbuf->end && isxmlspace(*xmlbuf->ptr))
-        xmlbuf->ptr++;
-
-    if (xmlbuf->ptr == xmlbuf->end) return FALSE;
-
-    if (*xmlbuf->ptr == '/')
-    {
-        xmlbuf->ptr++;
-        if (xmlbuf->ptr == xmlbuf->end || *xmlbuf->ptr != '>')
-            return FALSE;
-
-        xmlbuf->ptr++;
-        *end = TRUE;
-        *error = FALSE;
-        return FALSE;
-    }
-
-    if (*xmlbuf->ptr == '>')
-    {
-        xmlbuf->ptr++;
-        *error = FALSE;
-        return FALSE;
-    }
-
-    ptr = xmlbuf->ptr;
-    while (ptr < xmlbuf->end && *ptr != '=' && *ptr != '>' && !isxmlspace(*ptr)) ptr++;
-
-    if (ptr == xmlbuf->end) return FALSE;
-
-    name->ptr = xmlbuf->ptr;
-    name->len = ptr-xmlbuf->ptr;
-    xmlbuf->ptr = ptr;
-
-    /* skip spaces before '=' */
-    while (ptr < xmlbuf->end && *ptr != '=' && isxmlspace(*ptr)) ptr++;
-    if (ptr == xmlbuf->end || *ptr != '=') return FALSE;
-
-    /* skip '=' itself */
-    ptr++;
-    if (ptr == xmlbuf->end) return FALSE;
-
-    /* skip spaces after '=' */
-    while (ptr < xmlbuf->end && *ptr != '"' && *ptr != '\'' && isxmlspace(*ptr)) ptr++;
-
-    if (ptr == xmlbuf->end || (*ptr != '"' && *ptr != '\'')) return FALSE;
-
-    value->ptr = ++ptr;
-    if (ptr == xmlbuf->end) return FALSE;
-
-    ptr = memchrW(ptr, ptr[-1], xmlbuf->end - ptr);
-    if (!ptr)
-    {
-        xmlbuf->ptr = xmlbuf->end;
-        return FALSE;
-    }
-
-    value->len = ptr - value->ptr;
-    xmlbuf->ptr = ptr + 1;
-
-    if (xmlbuf->ptr == xmlbuf->end) return FALSE;
-
-    *error = FALSE;
-    return TRUE;
-}
-
-static BOOL next_xml_elem(xmlbuf_t* xmlbuf, xmlstr_t* elem)
-{
-    const WCHAR* ptr;
-
-    for (;;)
-    {
-        ptr = memchrW(xmlbuf->ptr, '<', xmlbuf->end - xmlbuf->ptr);
-        if (!ptr)
-        {
-            xmlbuf->ptr = xmlbuf->end;
-            return FALSE;
-        }
-        ptr++;
-        if (ptr + 3 < xmlbuf->end && ptr[0] == '!' && ptr[1] == '-' && ptr[2] == '-') /* skip comment */
-        {
-            for (ptr += 3; ptr + 3 <= xmlbuf->end; ptr++)
-                if (ptr[0] == '-' && ptr[1] == '-' && ptr[2] == '>') break;
-
-            if (ptr + 3 > xmlbuf->end)
-            {
-                xmlbuf->ptr = xmlbuf->end;
-                return FALSE;
-            }
-            xmlbuf->ptr = ptr + 3;
-        }
-        else break;
-    }
-
-    xmlbuf->ptr = ptr;
-    while (ptr < xmlbuf->end && !isxmlspace(*ptr) && *ptr != '>' && (*ptr != '/' || ptr == xmlbuf->ptr))
-        ptr++;
-
-    elem->ptr = xmlbuf->ptr;
-    elem->len = ptr - xmlbuf->ptr;
-    xmlbuf->ptr = ptr;
-    return xmlbuf->ptr != xmlbuf->end;
-}
-
-static BOOL parse_text_content(xmlbuf_t* xmlbuf, xmlstr_t* content)
-{
-    const WCHAR *ptr = memchrW(xmlbuf->ptr, '<', xmlbuf->end - xmlbuf->ptr);
-
-    if (!ptr) return FALSE;
-
-    content->ptr = xmlbuf->ptr;
-    content->len = ptr - xmlbuf->ptr;
-    xmlbuf->ptr = ptr;
-
-    return TRUE;
-}
-
 static BOOL parse_version(const WCHAR *str, struct assembly_version *version)
 {
     unsigned int ver[4];
@@ -1748,73 +1603,6 @@ static BOOL parse_version(const WCHAR *str, struct assembly_version *version)
 error:
     DPRINT1( "Wrong version definition in manifest file (%S)\n", str );
     return FALSE;
-}
-
-static BOOL parse_expect_elem(xmlbuf_t* xmlbuf, const WCHAR* name, const WCHAR *namespace)
-{
-    xmlstr_t    elem;
-    UNICODE_STRING elemU;
-    if (!next_xml_elem(xmlbuf, &elem)) return FALSE;
-    if (xml_elem_cmp(&elem, name, namespace)) return TRUE;
-    elemU = xmlstr2unicode(&elem);
-    DPRINT1( "unexpected element %wZ\n", &elemU );
-    return FALSE;
-}
-
-static BOOL parse_expect_no_attr(xmlbuf_t* xmlbuf, BOOL* end)
-{
-    xmlstr_t    attr_name, attr_value;
-    UNICODE_STRING attr_nameU, attr_valueU;
-    BOOL        error;
-
-    while (next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, end))
-    {
-        attr_nameU = xmlstr2unicode(&attr_name);
-        attr_valueU = xmlstr2unicode(&attr_value);
-        DPRINT1( "unexpected attr %wZ=%wZ\n", &attr_nameU,
-             &attr_valueU);
-    }
-    return !error;
-}
-
-static BOOL parse_end_element(xmlbuf_t *xmlbuf)
-{
-    BOOL end = FALSE;
-    return parse_expect_no_attr(xmlbuf, &end) && !end;
-}
-
-static BOOL parse_expect_end_elem(xmlbuf_t *xmlbuf, const WCHAR *name, const WCHAR *namespace)
-{
-    xmlstr_t    elem;
-    UNICODE_STRING elemU;
-    if (!next_xml_elem(xmlbuf, &elem)) return FALSE;
-    if (!xml_elem_cmp_end(&elem, name, namespace))
-    {
-        elemU = xmlstr2unicode(&elem);
-        DPRINT1( "unexpected element %wZ\n", &elemU );
-        return FALSE;
-    }
-    return parse_end_element(xmlbuf);
-}
-
-static BOOL parse_unknown_elem(xmlbuf_t *xmlbuf, const xmlstr_t *unknown_elem)
-{
-    xmlstr_t attr_name, attr_value, elem;
-    BOOL end = FALSE, error, ret = TRUE;
-
-    while(next_xml_attr(xmlbuf, &attr_name, &attr_value, &error, &end));
-    if(error || end) return end;
-
-    while(ret && (ret = next_xml_elem(xmlbuf, &elem)))
-    {
-        if(*elem.ptr == '/' && elem.len - 1 == unknown_elem->len &&
-           !strncmpW(elem.ptr+1, unknown_elem->ptr, unknown_elem->len))
-            break;
-        else
-            ret = parse_unknown_elem(xmlbuf, &elem);
-    }
-
-    return ret && parse_end_element(xmlbuf);
 }
 
 static BOOL parse_assembly_identity_elem(ACTIVATION_CONTEXT* actctx, struct assembly_identity* ai, PXML_TAG tag)
