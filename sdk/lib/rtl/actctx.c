@@ -1029,6 +1029,10 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
             else
             {
                 end_ptr = skip_to_charset(buffer, L"<");
+
+                if (tag->text_content != NULL)
+                    RtlFreeHeap(RtlGetProcessHeap(), 0, tag->text_content);
+
                 tag->text_content = strndupW(buffer, end_ptr - buffer);
             }
         }
