@@ -1137,6 +1137,8 @@ static BOOL CompareXMLAttributeName(PXML_TAG tag, ATTRIBUTE *attribute, WCHAR *e
     if (wcscmp(attribute->name, expected_name)) return FALSE;
     if (attribute->ns_prefix != NULL)
         xmlns = LookupXMLNamespace(tag, attribute->ns_prefix);
+    else if (tag->ns_prefix != NULL)
+        xmlns = LookupXMLNamespace(tag, tag->ns_prefix);
     else
         xmlns = LookupXMLNamespace(tag, L"");
 
