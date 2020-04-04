@@ -783,6 +783,8 @@ static void FreeXMLTag(PXML_TAG tag)
     {
         RtlFreeHeap(RtlGetProcessHeap(), 0, tag->attributes[i].name);
         RtlFreeHeap(RtlGetProcessHeap(), 0, tag->attributes[i].value);
+        if (tag->attributes[i].ns_prefix != NULL)
+            RtlFreeHeap(RtlGetProcessHeap(), 0, tag->attributes[i].ns_prefix);
     }
 
     if (tag->child_count != 0)
