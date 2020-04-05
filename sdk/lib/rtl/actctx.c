@@ -1035,6 +1035,7 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
                 }
 
                 child_tag = ParseXMLTag(&buffer, tag);
+                if (child_tag == NULL) goto fail;
                 tag->children[tag->child_count++] = child_tag;
             }
             else
