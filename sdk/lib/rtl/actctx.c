@@ -724,6 +724,8 @@ static WCHAR *strdupW(const WCHAR* str)
 static WCHAR *strndupW(const WCHAR *str, INT length)
 {
     WCHAR *ptr;
+    if (length == 0) return strdupW(L"");
+
     if (!(ptr = RtlAllocateHeap(RtlGetProcessHeap(), 0, (length + 1) * sizeof(WCHAR))))
         return NULL;
     return strncpyW(ptr, str, length);
