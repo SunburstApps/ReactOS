@@ -736,20 +736,15 @@ static WCHAR *skip_to_charset(WCHAR *input, const WCHAR *charset)
     WCHAR *ptr = input;
     INT i, charset_length = wcslen(charset);
 
-    while (*ptr != '\0')
+    for (i = 0; i < charset_length; i++)
     {
-        for (i = 0; i < charset_length; i++)
-        {
-            WCHAR *match = wcschr(ptr, charset[i]);
-            if (match == NULL || *match == '\0') continue;
+        WCHAR *match = wcschr(ptr, charset[i]);
+        if (match == NULL || *match == '\0') continue;
 
-            return ptr;
-        }
-
-        ptr++;
+        return match;
     }
 
-    return ptr;
+    return wcschr(ptr, 0); // skips to ending \0
 }
 
 #define MAX_ATTRIBUTES 64
