@@ -716,7 +716,7 @@ static WCHAR *strdupW(const WCHAR* str)
 {
     WCHAR*      ptr;
 
-    if (!(ptr = RtlAllocateHeap(RtlGetProcessHeap(), 0, (strlenW(str) + 1) * sizeof(WCHAR))))
+    if (!(ptr = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, (strlenW(str) + 1) * sizeof(WCHAR))))
         return NULL;
     return strcpyW(ptr, str);
 }
@@ -726,7 +726,7 @@ static WCHAR *strndupW(const WCHAR *str, INT length)
     WCHAR *ptr;
     if (length == 0) return strdupW(L"");
 
-    if (!(ptr = RtlAllocateHeap(RtlGetProcessHeap(), 0, (length + 1) * sizeof(WCHAR))))
+    if (!(ptr = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, (length + 1) * sizeof(WCHAR))))
         return NULL;
     return strncpyW(ptr, str, length);
 }
