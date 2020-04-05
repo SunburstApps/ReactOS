@@ -972,7 +972,7 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
     if (buffer[0] != '<') goto fail;
     buffer++;
 
-    end_ptr = skip_to_charset(buffer, L":> ");
+    end_ptr = skip_to_charset(buffer, L" :>");
     if (end_ptr[0] == '\0') goto fail;
 
     if (end_ptr[0] == ':')
@@ -980,7 +980,7 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
         tag->ns_prefix = strndupW(buffer, end_ptr - buffer);
         buffer = end_ptr + 1;
 
-        end_ptr = skip_to_charset(buffer, L"> ");
+        end_ptr = skip_to_charset(buffer, L" >");
         if (end_ptr[0] == '\0') goto fail;
 
         tag->name = strndupW(buffer, end_ptr - buffer);
