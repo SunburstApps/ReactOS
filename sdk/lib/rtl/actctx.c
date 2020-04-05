@@ -734,17 +734,38 @@ static WCHAR *strndupW(const WCHAR *str, INT length)
 static WCHAR *skip_to_charset(WCHAR *input, const WCHAR *charset)
 {
     WCHAR *ptr = input;
-    INT i, charset_length = wcslen(charset);
+    INT i, smallest_index, charset_length = wcslen(charset);
+    INT *indices;
+    BOOL found_match = FALSE;
+
+    indices = RtlAllocateHeap(RtlGetProcessHeap(), 0, charset_length * sizeof(INT));
+    for (i = 0; i < charset_length; i++) indices[i] = 0xFFFF;
 
     for (i = 0; i < charset_length; i++)
     {
         WCHAR *match = wcschr(ptr, charset[i]);
         if (match == NULL || *match == '\0') continue;
 
-        return match;
+        indices[i] = match - ptr;
+        found_match = TRUE;
     }
 
-    return wcschr(ptr, 0); // skips to ending \0
+    if (!found_match)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, indices);
+
+        // No matches found, skip to ending \0 to indicate error
+        return wcschr(ptr, 0);
+    }
+
+    smallest_index = 0xFFFF;
+    for (i = 0; i < charset_length; i++)
+    {
+        if (indices[i] < smallest_index) smallest_index = indices[i];
+    }
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, indices);
+    return input + smallest_index;
 }
 
 #define MAX_ATTRIBUTES 64
