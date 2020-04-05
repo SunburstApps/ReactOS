@@ -869,9 +869,10 @@ static void ParseXMLAttribute(WCHAR **buffer_ptr, PXML_TAG tag)
     if (buffer[0] == '>') goto done;
 
     end_ptr = skip_to_charset(buffer, L"=>");
-    if (end_ptr[0] == '\0' || end_ptr[0] == '>') goto done;
+    if (end_ptr[0] == '\0') goto done;
+    if (end_ptr[0] == '>') goto fail;
 
-    name = strndupW(buffer, buffer - end_ptr);
+    name = strndupW(buffer, end_ptr - buffer);
     buffer = end_ptr + 1;
 
     SkipXMLWhitespace(&buffer);
@@ -952,7 +953,7 @@ fail:
     if (end_ptr[0] != '\0')
     {
         // Skip to the end of the string, so that the caller knows there's a failure.
-        buffer = skip_to_charset(buffer, L"");
+        buffer = wcschr(buffer, 0);
     }
 
     goto done;
@@ -1015,6 +1016,7 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
     {
         if (buffer[0] == '<' && buffer[1] == '/')
         {
+            buffer += 2;
             end_ptr = skip_to_charset(buffer, L">");
             if (strncmpW(buffer, tag->name, end_ptr - buffer) != 0)
                 goto fail;
@@ -1046,7 +1048,7 @@ static PXML_TAG ParseXMLTag(WCHAR **buffer_ptr, PXML_TAG parent_tag)
                     RtlFreeHeap(RtlGetProcessHeap(), 0, tag->text_content);
 
                 tag->text_content = strndupW(buffer, end_ptr - buffer);
-                buffer = end_ptr + 1;
+                buffer = end_ptr;
             }
         }
     }
