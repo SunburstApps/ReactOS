@@ -27,10 +27,11 @@
 /**
  * Includes
  */
-#include <stdint.h>
-#include <string.h>
-#include <stdbool.h>
 #include <stddef.h>
+#include <stdbool.h>
+#if !defined(_INTSAFE_H_INCLUDED_) && !defined(_NTINTSAFE_H_INCLUDED_)
+#include <stdint.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

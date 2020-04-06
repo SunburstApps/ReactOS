@@ -24,6 +24,11 @@
 #include <alloca.h>
 #endif
 
+#include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stddef.h>
+
 #include <ctype.h>
 #include <malloc.h>
 #include <stdarg.h>
