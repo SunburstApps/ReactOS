@@ -582,6 +582,22 @@ static struct xml_string* xml_parse_tag_open(struct xml_parser* parser) {
 
 
 
+static void xml_parse_xml_decl(struct xml_parser *parser) {
+	xml_parser_info(parser, "tag_open");
+	xml_skip_whitespace(parser);
+
+	if (xml_parser_peek(parser, CURRENT_CHARACTER) == '<' && xml_parser_peek(parser, NEXT_CHARACTER) == '?') {
+		xml_parser_consume(parser, 2);
+		while (!(xml_parser_peek(parser, CURRENT_CHARACTER) == '?' && xml_parser_peek(parser, NEXT_CHARACTER) == '>')) {
+			xml_parser_consume(parser, 2);
+		}
+	}
+
+	xml_skip_whitespace(parser);
+}
+
+
+
 /**
  * [PRIVATE]
  *
@@ -848,6 +864,8 @@ struct xml_document* xml_parse_document(wchar_t* buffer, size_t length) {
 		xml_parser_error(&parser, NO_CHARACTER, "xml_parse_document::length equals zero");
 		return 0;
 	}
+
+	xml_parse_xml_decl(&parser);
 
 	/* Parse the root node
 	 */
