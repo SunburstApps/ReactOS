@@ -20,6 +20,8 @@
  *
  *  3. This notice may not be removed or altered from any source distribution.
  */
+
+#include "rtl.h"
 #ifdef XML_PARSER_VERBOSE
 #include <alloca.h>
 #endif
@@ -30,15 +32,27 @@
 #include <stddef.h>
 
 #include <ctype.h>
-#include <malloc.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "xml.h"
 
+static void *malloc(size_t size) {
+	return RtlAllocateHeap(RtlGetProcessHeap(), 0, size);
+}
 
+static void *calloc(size_t size) {
+	return RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, size);
+}
 
+static void *realloc(void *ptr, size_t size) {
+	return RtlReAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, ptr, size);
+}
+
+static void free(void *ptr) {
+	RtlFreeHeap(RtlGetProcessHeap(), 0, ptr);
+}
 
 
 /*
@@ -208,6 +222,25 @@ static _Bool xml_string_equals(struct xml_string* a, struct xml_string* b) {
 	}
 
 	for (; i < a->length; ++i) {
+		if (a->buffer[i] != b->buffer[i]) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+
+static _Bool xml_string_prefix_equals(struct xml_string* a, struct xml_string* b, size_t length)
+{
+	size_t i = 0;
+
+	if (length > a->length || length > b->length) {
+		return false;
+	}
+
+	for (; i < length; ++i) {
 		if (a->buffer[i] != b->buffer[i]) {
 			return false;
 		}

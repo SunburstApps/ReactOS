@@ -68,6 +68,8 @@ list(APPEND SOURCE
     version.c
     wait.c
     workitem.c
+    minixml/xml.c
+    minixml/xml.h
     rtl.h)
 
 if(ARCH STREQUAL "i386")
