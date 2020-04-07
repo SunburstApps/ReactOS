@@ -352,7 +352,7 @@ static void xml_node_free(struct xml_node* node) {
  */
 #ifdef XML_PARSER_VERBOSE
 static void xml_parser_info(struct xml_parser* parser, char const* message) {
-	// DPRINT("xml_parser_info %s\n", message);
+	DPRINT("xml_parser_info %s\n", message);
 }
 #else
 #define xml_parser_info(parser, message) {}
@@ -382,6 +382,16 @@ static void xml_parser_error(struct xml_parser* parser, enum xml_parser_offset o
 			row++;
 			column = 0;
 		}
+	}
+
+	if (NO_CHARACTER != offset) {
+		DPRINT1("xml_parser_error at %i:%i (is %c): %s\n",
+				row + 1, column, parser->buffer[character], message
+		);
+	} else {
+		DPRINT1(stderr,	"xml_parser_error at %i:%i: %s\n",
+				row + 1, column, message
+		);
 	}
 }
 
