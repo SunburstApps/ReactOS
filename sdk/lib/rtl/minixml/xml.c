@@ -42,8 +42,8 @@ static void *malloc(size_t size) {
 	return RtlAllocateHeap(RtlGetProcessHeap(), 0, size);
 }
 
-static void *calloc(size_t size) {
-	return RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, size);
+static void *calloc(size_t elemCount, size_t size) {
+	return RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, elemCount * size);
 }
 
 static void *realloc(void *ptr, size_t size) {
@@ -460,6 +460,30 @@ static void xml_skip_whitespace(struct xml_parser* parser) {
 }
 
 
+static int scan_attribute(wchar_t *token, wchar_t delimiter, wchar_t *str_name, wchar_t *str_content) {
+	wchar_t *work_token = token;
+	wchar_t *content_start = NULL;
+	int found = 0;
+
+	while (*work_token != '=') {
+		work_token++;
+	}
+
+	name_buffer = calloc(work_token - token, sizeof(wchar_t));
+	strcpyW(str_name, token, work_token - token);
+	if (*work_token == '=') found++;
+	if (*work_token == delimiter) work_token++;
+
+	content_start = work_token;
+	while (*work_token != delimiter) {
+		work_token++;
+	}
+
+	strcpyW(str_content, content_start, work_token - content_start);
+	found++;
+
+	return found;
+}
 
 /**
  * [PRIVATE]
@@ -499,9 +523,9 @@ static struct xml_attribute** xml_find_attributes(struct xml_parser* parser, str
 	for(token=xml_strtok_r(NULL, L" ", &rest); token!=NULL; token=xml_strtok_r(NULL, L" ", &rest)) {
 		str_name = malloc(wcslen(token)+1);
 		str_content = malloc(wcslen(token)+1);
-		// %s=\"%s\" wasn't working for some reason, ugly hack to make it work
-		if(swscanf(token, L"%[^=]=\"%[^\"]", str_name, str_content) != 2) {
-			if(swscanf(token, L"%[^=]=\'%[^\']", str_name, str_content) != 2) {
+
+		if(scan_attribute(token, '"', &str_name, &str_content) != 2) {
+			if(scan_attribute(token, '\'', &str_name, &str_content) != 2) {
 				free(str_name);
 				free(str_content);
 				continue;
