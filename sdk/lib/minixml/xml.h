@@ -174,6 +174,13 @@ size_t xml_string_length(struct xml_string* string);
  */
 void xml_string_copy(struct xml_string* string, wchar_t* buffer, size_t length);
 
+
+
+/**
+ * Compares the string with the supplied buffer
+ */
+bool xml_string_compare(struct xml_string* string, wchar_t* buffer, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

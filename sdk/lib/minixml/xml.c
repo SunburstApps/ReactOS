@@ -1104,3 +1104,17 @@ void xml_string_copy(struct xml_string* string, wchar_t* buffer, size_t length) 
 
 	memcpy(buffer, string->buffer, length);
 }
+
+
+
+bool xml_string_compare(struct xml_string *string, wchar_t *buffer, size_t length) {
+	int i;
+
+	if (string->length != length) return false;
+
+	for (i = 0; i < length; i++) {
+		if (string->buffer[i] != buffer[i]) return false;
+	}
+
+	return true;
+}
