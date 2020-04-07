@@ -160,6 +160,29 @@ wchar_t* xml_easy_content(struct xml_node* node);
 
 
 /**
+ * @return 0-terminated copy of element's namespace URI, or NULL if none.
+ * @warning User must free the result
+ */
+wchar_t* xml_easy_namespace_uri(struct xml_node* node);
+
+
+
+/**
+ * @return 0-terminated copy of n-th attribute's namespace URI, or NULL if none.
+ * @warning User must free the result
+ */
+wchar_t* xml_easy_attr_namespace_uri(struct xml_node* node, size_t attribute);
+
+
+
+/**
+ * @return TRUE if the n-th attribute is a namespace definition (xmlns or xmlns:foo).
+ */
+bool xml_easy_is_attr_namespace_uri(struct xml_node* node, size_t attribute);
+
+
+
+/**
  * @return Length of the string
  */
 size_t xml_string_length(struct xml_string* string);

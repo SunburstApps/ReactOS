@@ -26,15 +26,13 @@
 #include <alloca.h>
 #endif
 
-#include <stdint.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stddef.h>
+#define NDEBUG
+#include <debug.h>
+#include <wine/unicode.h>
 
 #include <ctype.h>
 #include <stdarg.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include "xml.h"
 
@@ -54,6 +52,20 @@ static void free(void *ptr) {
 	RtlFreeHeap(RtlGetProcessHeap(), 0, ptr);
 }
 
+static wchar_t *xml_strdup_substr(wchar_t* src, size_t length) {
+	// If length == 0, allocate space for one NUL byte.
+	if (length == 0) length = 1;
+
+	wchar_t *ptr = (wchar_t*)calloc(length, sizeof(wchar_t));
+	if (ptr == NULL) return NULL;
+
+	if (length > 0) strncpyW(ptr, str, length);
+	return ptr;
+}
+
+static wchar_t *xml_strdup(wchar_t *src) {
+	return xml_strdup_substr(src, strlenW(src));
+}
 
 /*
  * public domain strtok_r() by Charlie Gordon
@@ -261,7 +273,7 @@ static wchar_t* xml_string_clone(struct xml_string* s) {
 		return 0;
 	}
 
-	clone = calloc(s->length + 1, sizeof(uint8_t));
+	clone = calloc(s->length + 1, sizeof(wchar_t));
 
 	xml_string_copy(s, clone, s->length);
 	clone[s->length] = 0;
@@ -1174,4 +1186,87 @@ bool xml_string_compare(struct xml_string *string, wchar_t *buffer, size_t lengt
 	}
 
 	return true;
+}
+
+
+
+static wchar_t *lookup_xmlns_attr(struct xmlns_node* node, wchar_t attr_name) {
+	for (i = 0; i < attr_count; i++) {
+		struct xml_string *attr = xml_node_attribute(node, i);
+
+		if (xml_string_compare(attr->name, xmlns_prefix, prefix_length + 6)) {
+			return xml_clone_string(attr->content);
+		}
+	}
+
+	if (node->parent != NULL) {
+		return lookup_xmlns(node->parent, ns_prefix);
+	} else {
+		return NULL;
+	}
+}
+
+
+
+static wchar_t *build_xmlns_attr(wchar_t* buffer, size_t prefix_length) {
+	wchar_t *xmlns_attr;
+
+	if (prefix_length > 0) {
+		wchar_t *xmlns_attr = calloc(strlenW(ns_prefix) + 6, sizeof(WCHAR));
+		strncpyW(xmlns_attr, L"xmlns:", 6);
+		strncpyW(xmlns_attr + 6, buffer, prefix_length);
+	} else {
+		xmlns_attr = xml_strdup(L"xmlns");
+	}
+
+	return xmlns_attr;
+}
+
+
+
+wchar_t* xml_easy_namespace_uri(struct xml_node* node) {
+	wchar_t *ns_prefix = NULL;
+	int i, attr_count = xml_node_attributes(node);
+
+	for (i = 0; i < node->name->length; i++) {
+		if (node->name->buffer[i] == ':') {
+			ns_prefix = build_xmlns_attr(buffer, node->name->buffer, i);
+			break;
+		}
+	}
+
+	if (ns_prefix == NULL) ns_prefix = build_xmlns_attr(node->name->buffer, 0);
+
+	wchar_t *value = lookup_xmlns_attr(node, ns_prefix);
+	free(ns_prefix);
+	return value;
+}
+
+
+
+wchar_t* xml_easy_attr_namespace_uri(struct xml_node* node, size_t attribute) {
+	wchar_t *ns_prefix = NULL;
+	int i, attr_count = xml_node_attributes(node);
+	struct xml_attribute *attr = xml_node_attribute(node, i);
+
+	for (i = 0; i < attr->name->length; i++) {
+		if (attr->name->buffer[i] == ':') {
+			ns_prefix = build_xmlns_attr(buffer, attr->name->buffer, i);
+			break;
+		}
+	}
+
+	if (ns_prefix == NULL) ns_prefix = build_xmlns_attr(attr->name->buffer, 0);
+
+	wchar_t *value = lookup_xmlns_attr(node, ns_prefix);
+	free(ns_prefix);
+	return value;
+}
+
+
+
+bool xml_easy_is_attr_namespace_uri(struct xml_node* node, size_t attribute) {
+	struct xml_attribute *attr = xml_node_attribute(node, attribute);
+	if (strcmpW(attr->name->buffer, L"xmlns") == 0) return true;
+	return strncmpW(attr->name->buffer, L"xmlns:", 6);
 }
