@@ -300,7 +300,7 @@ long double    truncl(long double x);
 #define _LIBCPP_STDLIB_INCLUDE_NEXT
 #include <stdlib.h>
 
-#include_next <math.h>
+#include <../crt/math.h>
 
 #ifdef __cplusplus
 
@@ -1572,7 +1572,7 @@ trunc(_A1 __lcpp_x) _NOEXCEPT {return ::trunc((double)__lcpp_x);}
 // and receive the definitions of mathematical constants, even if <math.h>
 // has previously been included.
 #if defined(_LIBCPP_MSVCRT) && defined(_USE_MATH_DEFINES)
-#include_next <math.h>
+#include <../crt/math.h>
 #endif
 
 #endif  // _LIBCPP_MATH_H

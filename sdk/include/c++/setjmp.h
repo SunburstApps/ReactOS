@@ -31,7 +31,7 @@ void longjmp(jmp_buf env, int val);
 #pragma GCC system_header
 #endif
 
-#include_next <setjmp.h>
+#include <../crt/setjmp.h>
 
 #ifdef __cplusplus
 

@@ -76,7 +76,7 @@ Macros:
 #pragma GCC system_header
 #endif
 
-#include_next <float.h>
+#include <../crt/float.h>
 
 #ifdef __cplusplus
 

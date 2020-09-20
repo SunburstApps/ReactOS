@@ -29,7 +29,7 @@
 
 #else  // __cplusplus
 
-#include_next <complex.h>
+#include <../crt/complex.h>
 
 #endif  // __cplusplus
 

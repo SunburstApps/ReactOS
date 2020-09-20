@@ -13,7 +13,7 @@
 #pragma GCC system_header
 #endif
 
-#include_next <wchar.h>
+#include <../crt/wchar.h>
 
 #elif !defined(_LIBCPP_WCHAR_H)
 #define _LIBCPP_WCHAR_H

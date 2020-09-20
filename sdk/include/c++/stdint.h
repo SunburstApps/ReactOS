@@ -120,6 +120,6 @@ Macros:
 #   define __STDC_CONSTANT_MACROS
 #endif
 
-#include_next <stdint.h>
+#include <../crt/stdint.h>
 
 #endif  // _LIBCPP_STDINT_H

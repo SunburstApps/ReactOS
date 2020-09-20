@@ -29,7 +29,7 @@
 
 #else  // __cplusplus
 
-#include_next <tgmath.h>
+#error "ReactOS tgmath.h is usable only in C++ mode"
 
 #endif  // __cplusplus
 

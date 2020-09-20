@@ -39,6 +39,6 @@ Functions:
 #pragma GCC system_header
 #endif
 
-#include_next <locale.h>
+#include <../crt/locale.h>
 
 #endif  // _LIBCPP_LOCALE_H
