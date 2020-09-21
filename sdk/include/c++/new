@@ -175,10 +175,12 @@ _LIBCPP_INLINE_VAR constexpr destroying_delete_t destroying_delete{};
 
 }  // std
 
+#if !defined(_THROW_BAD_ALLOW)
 #if defined(_LIBCPP_CXX03_LANG)
 #define _THROW_BAD_ALLOC throw(std::bad_alloc)
 #else
 #define _THROW_BAD_ALLOC
+#endif
 #endif
 
 #if !defined(_LIBCPP_ABI_VCRUNTIME)
