@@ -8,6 +8,13 @@
 
 #pragma pack(push,_CRT_PACKING)
 
+#define UINT32_C(x) x
+#ifdef _MSC_VER
+#define UINT64_C(x)  x##i64
+#else
+#define UINT64_C(x) x##ull
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
