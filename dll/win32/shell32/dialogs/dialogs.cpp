@@ -29,6 +29,7 @@ typedef struct
     LPCWSTR lpstrTitle;
     LPCWSTR lpstrDescription;
     UINT uFlags;
+    BOOL bCoInited;
 } RUNFILEDLGPARAMS;
 
 typedef BOOL (WINAPI * LPFNOFN) (OPENFILENAMEW *);
@@ -547,10 +548,20 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
             ComboInfo.cbSize = sizeof(ComboInfo);
             GetComboBoxInfo(hwndCombo, &ComboInfo);
             hwndEdit = ComboInfo.hwndItem;
+            ASSERT(::IsWindow(hwndEdit));
+
+            // SHAutoComplete needs co init
+            prfdp->bCoInited = SUCCEEDED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED));
+
             SHAutoComplete(hwndEdit, SHACF_FILESYSTEM | SHACF_FILESYS_ONLY | SHACF_URLALL);
 
             SetFocus(hwndCombo);
             return TRUE;
+
+        case WM_DESTROY:
+            if (prfdp->bCoInited)
+                CoUninitialize();
+            break;
 
         case WM_COMMAND:
             switch (LOWORD(wParam))
