@@ -248,9 +248,9 @@ function(set_module_type_toolchain MODULE TYPE)
         add_target_link_flags(${MODULE} "/DLL")
     elseif(${TYPE} STREQUAL "kernelmodedriver")
         # Disable linker warning 4078 (multiple sections found with different attributes) for INIT section use
-        add_target_link_flags(${MODULE} "/DRIVER /IGNORE:4078 /SECTION:INIT,D")
+        add_target_link_flags(${MODULE} "/DRIVER /SECTION:INIT,ERWD")
     elseif(${TYPE} STREQUAL "wdmdriver")
-        add_target_link_flags(${MODULE} "/DRIVER:WDM /IGNORE:4078 /SECTION:INIT,D")
+        add_target_link_flags(${MODULE} "/DRIVER:WDM /SECTION:INIT,ERWD")
     endif()
 
     if(RUNTIME_CHECKS)
@@ -291,7 +291,7 @@ endfunction()
 
 function(generate_import_lib _libname _dllname _spec_file)
 
-    set(_def_file ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_exp.def)
+    set(_def_file ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def)
     set(_asm_stubs_file ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_stubs.asm)
 
     # Generate the asm stub file and the def file for import library
