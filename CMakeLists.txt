@@ -9,9 +9,6 @@ include(CMakeDependentOption)
 
 project(REACTOS)
 
-# Versioning
-include(sdk/include/reactos/version.cmake)
-
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_INCLUDE_DIRECTORIES_PROJECT_BEFORE ON)
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
@@ -31,6 +28,16 @@ endif()
 # See http://cmake.3232098.n2.nabble.com/Case-insensitive-string-compare-td7580269.html
 # for more information.
 string(TOLOWER ${ARCH} ARCH)
+
+# Alternative WinNT-compatible architecture string
+if(ARCH STREQUAL "i386")
+    set(WINARCH "x86")
+else()
+    set(WINARCH ${ARCH})
+endif()
+
+# Versioning
+include(sdk/include/reactos/version.cmake)
 
 # Compile options
 if(ARCH STREQUAL "i386")
@@ -154,6 +161,7 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     if(ENABLE_CCACHE)
         message(WARNING "-- Disabling precompiled headers support (ccache).")
         option(PCH "Whether to use precompiled headers" OFF)
+        set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
     elseif(GCC)
         message(WARNING "-- Disabling precompiled headers on GCC by default CORE-17108.")
         option(PCH "Whether to use precompiled headers" OFF)
