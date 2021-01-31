@@ -35,7 +35,7 @@ if(USE_DUMMY_PSEH)
 endif()
 
 if(STACK_PROTECTOR)
-    add_compile_options(-fstack-protector-all)
+    add_compile_options(-fstack-protector-strong)
 endif()
 
 # Compiler Core
@@ -53,7 +53,7 @@ if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang")
         add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wold-style-declaration>")
     endif()
 else()
-    add_compile_options("$<$<COMPILE_LANGUAGE:C>:-std=gnu99;-Wno-microsoft>")
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:-Wno-microsoft>")
     add_compile_options(-Wno-pragma-pack)
     add_compile_options(-fno-associative-math)
     add_compile_options(-fcommon)
@@ -148,6 +148,7 @@ if(ARCH STREQUAL "i386")
     endif()
 elseif(ARCH STREQUAL "amd64")
     add_compile_options(-mpreferred-stack-boundary=4)
+    add_compile_options(-Wno-error)
 endif()
 
 # Other
@@ -241,13 +242,6 @@ set(CMAKE_EXE_LINKER_FLAGS "-nostdlib -Wl,--enable-auto-image-base,--disable-aut
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS_INIT} -Wl,--disable-stdcall-fixup")
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS_INIT} -Wl,--disable-stdcall-fixup")
 
-if((CMAKE_C_COMPILER_ID STREQUAL "GNU") AND
-   (NOT CMAKE_BUILD_TYPE STREQUAL "Release") AND
-   (NOT CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0))
-    # FIXME: Set this once Clang toolchain works with it
-    set(_compress_debug_sections_flag "-Wa,--compress-debug-sections")
-endif()
-
 set(CMAKE_C_COMPILE_OBJECT "<CMAKE_C_COMPILER> <DEFINES> ${_compress_debug_sections_flag} <INCLUDES> <FLAGS> -o <OBJECT> -c <SOURCE>")
 # FIXME: Once the GCC toolchain bugs are fixed, add _compress_debug_sections_flag to CXX too
 set(CMAKE_CXX_COMPILE_OBJECT "<CMAKE_CXX_COMPILER> <DEFINES> <INCLUDES> <FLAGS> -o <OBJECT> -c <SOURCE>")
@@ -294,10 +288,6 @@ function(set_module_type_toolchain MODULE TYPE)
         #Disabled due to LD bug: ROSBE-154
         #add_linker_script(${MODULE} ${REACTOS_SOURCE_DIR}/sdk/cmake/init-section.lds)
     endif()
-
-    if(STACK_PROTECTOR)
-        target_link_libraries(${MODULE} gcc_ssp)
-    endif()
 endfunction()
 
 function(add_delay_importlibs _module)
@@ -329,20 +319,52 @@ function(generate_import_lib _libname _dllname _spec_file)
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
         COMMAND native-spec2def -n=${_dllname} -a=${ARCH2} ${ARGN} --implib -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
-    set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def PROPERTIES EXTERNAL_OBJECT TRUE)
 
-    # Create normal importlib
-    _add_library(${_libname} STATIC EXCLUDE_FROM_ALL ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def)
-    set_target_properties(${_libname} PROPERTIES LINKER_LANGUAGE "IMPLIB" PREFIX "")
+    # With this, we let DLLTOOL create an import library
+    set(LIBRARY_PRIVATE_DIR ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/${_libname}.dir)
+    add_custom_command(
+        OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+        # ar just puts stuff into the archive, without looking twice. Just delete the lib, we're going to rebuild it anyway
+        COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE:${_libname}>
+        COMMAND ${CMAKE_DLLTOOL} --def ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def --kill-at --output-lib=${_libname}.a -t ${_libname}
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
+        WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
 
-    # Create delayed importlib
-    _add_library(${_libname}_delayed STATIC EXCLUDE_FROM_ALL ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def)
-    set_target_properties(${_libname}_delayed PROPERTIES LINKER_LANGUAGE "IMPLIB_DELAYED" PREFIX "")
+    # We create a static library with the importlib thus created as object. AR will extract the obj files and archive it again as a thin lib
+    set_source_files_properties(
+        ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+        PROPERTIES
+        EXTERNAL_OBJECT TRUE)
+    _add_library(${_libname} STATIC EXCLUDE_FROM_ALL
+        ${LIBRARY_PRIVATE_DIR}/${_libname}.a)
+    set_target_properties(${_libname}
+        PROPERTIES
+        LINKER_LANGUAGE "C"
+        PREFIX "")
+
+    # Do the same with delay-import libs
+    set(LIBRARY_PRIVATE_DIR ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/${_libname}_delayed.dir)
+    add_custom_command(
+        OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}_delayed.a
+        # ar just puts stuff into the archive, without looking twice. Just delete the lib, we're going to rebuild it anyway
+        COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE:${_libname}_delayed>
+        COMMAND ${CMAKE_DLLTOOL} --def ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def --kill-at --output-delaylib=${_libname}_delayed.a -t ${_libname}_delayed
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
+        WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+
+    # We create a static library with the importlib thus created. AR will extract the obj files and archive it again as a thin lib
+    set_source_files_properties(
+        ${LIBRARY_PRIVATE_DIR}/${_libname}_delayed.a
+        PROPERTIES
+        EXTERNAL_OBJECT TRUE)
+    _add_library(${_libname}_delayed STATIC EXCLUDE_FROM_ALL
+        ${LIBRARY_PRIVATE_DIR}/${_libname}_delayed.a)
+    set_target_properties(${_libname}_delayed
+        PROPERTIES
+        LINKER_LANGUAGE "C"
+        PREFIX "")
 endfunction()
 
-# Cute little hack to produce import libs
-set(CMAKE_IMPLIB_CREATE_STATIC_LIBRARY "${CMAKE_DLLTOOL} --def <OBJECTS> --kill-at --output-lib=<TARGET>")
-set(CMAKE_IMPLIB_DELAYED_CREATE_STATIC_LIBRARY "${CMAKE_DLLTOOL} --def <OBJECTS> --kill-at --output-delaylib=<TARGET>")
 function(spec2def _dllname _spec_file)
 
     cmake_parse_arguments(__spec2def "ADD_IMPORTLIB;NO_PRIVATE_WARNINGS;WITH_RELAY" "VERSION" "" ${ARGN})

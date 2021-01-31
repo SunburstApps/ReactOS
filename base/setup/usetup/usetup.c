@@ -948,8 +948,7 @@ RepairIntroPage(PINPUT_RECORD Ir)
         {
             return RECOVERY_PAGE;
         }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE))  /* ESC */
+        else if (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE)  /* ESC */
         {
             return WELCOME_PAGE;
         }
@@ -1051,6 +1050,11 @@ UpgradeRepairPage(PINPUT_RECORD Ir)
                     RedrawGenericList(&ListUi);
                 break;
             }
+#if 1
+/* TODO: Temporarily kept until correct keyboard layout is in place.
+ * (Actual AsciiChar of ESCAPE should be 0x1B instead of 0.)
+ * Addendum to commit 8b94515b.
+ */
             case VK_ESCAPE: /* ESC */
             {
                 RestoreGenericListUiState(&ListUi);
@@ -1060,8 +1064,22 @@ UpgradeRepairPage(PINPUT_RECORD Ir)
                 return DEVICE_SETTINGS_PAGE;
                 // return SCSI_CONTROLLER_PAGE;
             }
+
+#endif
             }
         }
+#if 0
+/* TODO: Restore this once correct keyboard layout is in place. */
+        else if (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE) /* ESC */
+        {
+            RestoreGenericListUiState(&ListUi);
+            // return nextPage;    // prevPage;
+
+            // return INSTALL_INTRO_PAGE;
+            return DEVICE_SETTINGS_PAGE;
+            // return SCSI_CONTROLLER_PAGE;
+        }
+#endif
         else
         {
             // switch (toupper(Ir->Event.KeyEvent.uChar.AsciiChar))
@@ -1411,8 +1429,7 @@ HandleGenericList(PGENERIC_LIST_UI ListUi,
             else
                 RedrawGenericList(ListUi);
         }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE))  /* ESC */
+        else if (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE)  /* ESC */
         {
             RestoreGenericListUiState(ListUi);
             return nextPage;    // Use some "prevPage;" instead?
@@ -3279,8 +3296,7 @@ SelectFileSystemPage(PINPUT_RECORD Ir)
 
             break;
         }
-        else if ((Ir->Event.KeyEvent.uChar.AsciiChar == 0x00) &&
-                 (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE))  /* ESC */
+        else if (Ir->Event.KeyEvent.wVirtualKeyCode == VK_ESCAPE)  /* ESC */
         {
             /* Reset the formatter machine state */
             TempPartition = NULL;

@@ -44,6 +44,7 @@ typedef struct _FDO_EXTENSION
 
     SINGLE_LIST_ENTRY PartitionList;
     UINT32 EnumeratedPartitionsTotal;
+    UNICODE_STRING DiskInterfaceName;
 
     struct {
         UINT64 DiskSize;
@@ -76,7 +77,6 @@ typedef struct _PARTITION_EXTENSION
     UINT32 OnDiskNumber; // partition number for issuing Io requests to the kernel
     BOOLEAN IsEnumerated; // reported via IRP_MN_QUERY_DEVICE_RELATIONS
     BOOLEAN SymlinkCreated;
-    BOOLEAN DeviceRemoved; // !!!
     BOOLEAN Attached; // attached to PartitionList of the FDO
     union
     {

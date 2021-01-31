@@ -59,14 +59,12 @@ extern POBJECT_TYPE IoAdapterObjectType;
 extern ERESOURCE IopDatabaseResource;
 ERESOURCE IopSecurityResource;
 extern ERESOURCE IopDriverLoadResource;
-extern KGUARDED_MUTEX PnpNotifyListLock;
 extern LIST_ENTRY IopDiskFileSystemQueueHead;
 extern LIST_ENTRY IopCdRomFileSystemQueueHead;
 extern LIST_ENTRY IopTapeFileSystemQueueHead;
 extern LIST_ENTRY IopNetworkFileSystemQueueHead;
 extern LIST_ENTRY DriverBootReinitListHead;
 extern LIST_ENTRY DriverReinitListHead;
-extern LIST_ENTRY PnpNotifyListHead;
 extern LIST_ENTRY IopFsNotifyChangeQueueHead;
 extern LIST_ENTRY IopErrorLogListHead;
 extern LIST_ENTRY IopTimerQueueHead;
@@ -79,6 +77,7 @@ extern KSPIN_LOCK IopLogListLock;
 extern KSPIN_LOCK IopTimerLock;
 
 extern PDEVICE_OBJECT IopErrorLogObject;
+extern BOOLEAN PnPBootDriversInitialized;
 
 GENERAL_LOOKASIDE IoLargeIrpLookaside;
 GENERAL_LOOKASIDE IoSmallIrpLookaside;
@@ -480,14 +479,12 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     ExInitializeResourceLite(&IopDatabaseResource);
     ExInitializeResourceLite(&IopSecurityResource);
     ExInitializeResourceLite(&IopDriverLoadResource);
-    KeInitializeGuardedMutex(&PnpNotifyListLock);
     InitializeListHead(&IopDiskFileSystemQueueHead);
     InitializeListHead(&IopCdRomFileSystemQueueHead);
     InitializeListHead(&IopTapeFileSystemQueueHead);
     InitializeListHead(&IopNetworkFileSystemQueueHead);
     InitializeListHead(&DriverBootReinitListHead);
     InitializeListHead(&DriverReinitListHead);
-    InitializeListHead(&PnpNotifyListHead);
     InitializeListHead(&ShutdownListHead);
     InitializeListHead(&LastChanceShutdownListHead);
     InitializeListHead(&IopFsNotifyChangeQueueHead);
@@ -497,6 +494,9 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     KeInitializeSpinLock(&DriverBootReinitListLock);
     KeInitializeSpinLock(&ShutdownListLock);
     KeInitializeSpinLock(&IopLogListLock);
+
+    /* Initialize PnP notifications */
+    PiInitializeNotifications();
 
     /* Initialize the reserve IRP */
     if (!IopInitializeReserveIrp(&IopReserveIrpAllocator))
@@ -584,6 +584,10 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         return FALSE;
     }
 
+    // the disk subsystem is initialized here and the SystemRoot is set too
+    // we can finally load other drivers from the boot volume
+    PnPBootDriversInitialized = TRUE;
+
 #if !defined(_WINKD_) && defined(KDBG)
     /* Read KDB Data */
     KdbInit();
@@ -591,9 +595,6 @@ IoInitSystem(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     /* I/O is now setup for disk access, so phase 3 */
     KdInitSystem(3, LoaderBlock);
 #endif
-
-    /* Load services for devices found by PnP manager */
-    IopInitializePnpServices(IopRootDeviceNode);
 
     /* Load system start drivers */
     IopInitializeSystemDrivers();

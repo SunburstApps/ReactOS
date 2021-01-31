@@ -993,10 +993,6 @@ MmZeroPageThread(
 );
 
 /* hypermap.c *****************************************************************/
-
-extern PEPROCESS HyperProcess;
-extern KIRQL HyperIrql;
-
 PVOID
 NTAPI
 MiMapPageInHyperSpace(IN PEPROCESS Process,
@@ -1018,19 +1014,6 @@ VOID
 NTAPI
 MiUnmapPagesInZeroSpace(IN PVOID VirtualAddress,
                         IN PFN_NUMBER NumberOfPages);
-
-//
-// ReactOS Compatibility Layer
-//
-FORCEINLINE
-PVOID
-MmCreateHyperspaceMapping(IN PFN_NUMBER Page)
-{
-    HyperProcess = (PEPROCESS)KeGetCurrentThread()->ApcState.Process;
-    return MiMapPageInHyperSpace(HyperProcess, Page, &HyperIrql);
-}
-
-#define MmDeleteHyperspaceMapping(x) MiUnmapPageInHyperSpace(HyperProcess, x, HyperIrql);
 
 /* i386/page.c *********************************************************/
 
@@ -1401,6 +1384,10 @@ MmCallDllInitialize(
     IN PLIST_ENTRY ListHead
 );
 
+VOID
+NTAPI
+MmFreeDriverInitialization(
+    IN PLDR_DATA_TABLE_ENTRY LdrEntry);
 
 /* procsup.c *****************************************************************/
 
