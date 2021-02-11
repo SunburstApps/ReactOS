@@ -1,5 +1,5 @@
 diff --git a/dll/directx/wine/d3dx9_36/shader.c b/dll/directx/wine/d3dx9_36/shader.c
-index 7a23867..fc0f503 100644
+index 1c6acc8..3e0d922 100644
 --- a/dll/directx/wine/d3dx9_36/shader.c
 +++ b/dll/directx/wine/d3dx9_36/shader.c
 @@ -441,6 +441,41 @@ HRESULT WINAPI D3DXCompileShader(const char *data, UINT length, const D3DXMACRO 

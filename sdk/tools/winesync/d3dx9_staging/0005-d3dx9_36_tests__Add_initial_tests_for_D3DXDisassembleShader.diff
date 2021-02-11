@@ -1,9 +1,9 @@
 diff --git a/modules/rostests/winetests/d3dx9_36/shader.c b/modules/rostests/winetests/d3dx9_36/shader.c
-index b67ffb2..02675c6 100644
+index e2925fa..5edac61 100644
 --- a/modules/rostests/winetests/d3dx9_36/shader.c
 +++ b/modules/rostests/winetests/d3dx9_36/shader.c
-@@ -6575,6 +6575,51 @@ static void test_shader_semantics(void)
-     }
+@@ -6623,6 +6623,51 @@ static void test_fragment_linker(void)
+     DestroyWindow(window);
  }
  
 +static void test_disassemble_shader(void)
@@ -54,9 +54,9 @@ index b67ffb2..02675c6 100644
  START_TEST(shader)
  {
      test_get_shader_size();
-@@ -6589,4 +6634,5 @@ START_TEST(shader)
-     test_registerset();
+@@ -6638,4 +6683,5 @@ START_TEST(shader)
      test_registerset_defaults();
      test_shader_semantics();
+     test_fragment_linker();
 +    test_disassemble_shader();
  }

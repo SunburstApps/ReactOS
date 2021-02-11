@@ -1,5 +1,5 @@
 diff --git a/dll/directx/wine/d3dx9_36/skin.c b/dll/directx/wine/d3dx9_36/skin.c
-index bed4b9f..0a305a9 100644
+index ffc89f0..0fea1ac 100644
 --- a/dll/directx/wine/d3dx9_36/skin.c
 +++ b/dll/directx/wine/d3dx9_36/skin.c
 @@ -2,6 +2,7 @@
@@ -10,7 +10,7 @@ index bed4b9f..0a305a9 100644
   *
   * This library is free software; you can redistribute it and/or
   * modify it under the terms of the GNU Lesser General Public
-@@ -377,10 +378,89 @@ static HRESULT WINAPI d3dx9_skin_info_GetDeclaration(ID3DXSkinInfo *iface,
+@@ -399,10 +400,89 @@ static HRESULT WINAPI d3dx9_skin_info_GetDeclaration(ID3DXSkinInfo *iface,
  static HRESULT WINAPI d3dx9_skin_info_UpdateSkinnedMesh(ID3DXSkinInfo *iface, const D3DXMATRIX *bone_transforms,
          const D3DXMATRIX *bone_inv_transpose_transforms, const void *src_vertices, void *dst_vertices)
  {
@@ -104,10 +104,10 @@ index bed4b9f..0a305a9 100644
  
  static HRESULT WINAPI d3dx9_skin_info_ConvertToBlendedMesh(ID3DXSkinInfo *iface, ID3DXMesh *mesh_in,
 diff --git a/modules/rostests/winetests/d3dx9_36/mesh.c b/modules/rostests/winetests/d3dx9_36/mesh.c
-index ea0b867..c12bf60 100644
+index e46e38d..78f95a6 100644
 --- a/modules/rostests/winetests/d3dx9_36/mesh.c
 +++ b/modules/rostests/winetests/d3dx9_36/mesh.c
-@@ -5316,6 +5316,88 @@ static void test_create_skin_info(void)
+@@ -5265,6 +5265,88 @@ static void test_create_skin_info(void)
      ok(hr == D3DERR_INVALIDCALL, "Expected D3DERR_INVALIDCALL, got %#x\n", hr);
  }
  
@@ -196,7 +196,7 @@ index ea0b867..c12bf60 100644
  static void test_convert_adjacency_to_point_reps(void)
  {
      HRESULT hr;
-@@ -11362,6 +11444,7 @@ START_TEST(mesh)
+@@ -11509,6 +11591,7 @@ START_TEST(mesh)
      D3DXGenerateAdjacencyTest();
      test_update_semantics();
      test_create_skin_info();

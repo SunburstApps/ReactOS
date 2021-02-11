@@ -1,9 +1,9 @@
 diff --git a/modules/rostests/winetests/d3dx9_36/shader.c b/modules/rostests/winetests/d3dx9_36/shader.c
-index 02675c6..0d7dcc3 100644
+index 5edac61..0ae8f27 100644
 --- a/modules/rostests/winetests/d3dx9_36/shader.c
 +++ b/modules/rostests/winetests/d3dx9_36/shader.c
-@@ -6575,6 +6575,60 @@ static void test_shader_semantics(void)
-     }
+@@ -6623,6 +6623,60 @@ static void test_fragment_linker(void)
+     DestroyWindow(window);
  }
  
 +static const DWORD ps_tex[] = {
@@ -63,7 +63,7 @@ index 02675c6..0d7dcc3 100644
  static void test_disassemble_shader(void)
  {
      static const char disasm_vs[] = "    vs_1_1\n"
-@@ -6589,6 +6643,33 @@ static void test_disassemble_shader(void)
+@@ -6637,6 +6691,33 @@ static void test_disassemble_shader(void)
                                      "    dp3 r0, c1, c0\n"
                                      "    mul r0, v0, r0\n"
                                      "    mul r0, t0, r0\n";
@@ -97,7 +97,7 @@ index 02675c6..0d7dcc3 100644
      ID3DXBuffer *disassembly;
      HRESULT ret;
      char *ptr;
-@@ -6618,6 +6699,88 @@ static void test_disassemble_shader(void)
+@@ -6666,6 +6747,88 @@ static void test_disassemble_shader(void)
      ok(!memcmp(ptr, disasm_ps, sizeof(disasm_ps) - 1), /* compare beginning */
         "Returned '%s', expected '%s'\n", ptr, disasm_ps);
      ID3DXBuffer_Release(disassembly);

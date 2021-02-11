@@ -1,8 +1,8 @@
 diff --git a/dll/directx/wine/d3dx9_36/shader.c b/dll/directx/wine/d3dx9_36/shader.c
-index e8ce3dd..7a23867 100644
+index 6a038265d11..c54bacc364b 100644
 --- a/dll/directx/wine/d3dx9_36/shader.c
 +++ b/dll/directx/wine/d3dx9_36/shader.c
-@@ -1,6 +1,7 @@
+@@ -4,6 +4,7 @@
  /*
   * Copyright 2008 Luis Busquets
   * Copyright 2009 Matteo Bruni
@@ -10,15 +10,16 @@ index e8ce3dd..7a23867 100644
   * Copyright 2011 Travis Athougies
   *
   * This library is free software; you can redistribute it and/or
-@@ -20,6 +21,7 @@
+@@ -21,7 +22,7 @@
+  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+  */
  
- #include "config.h"
- #include "wine/port.h"
+-
 +#include <stdio.h>
- 
  #include "d3dx9_private.h"
  #include "d3dcommon.h"
-@@ -2140,10 +2142,334 @@ HRESULT WINAPI D3DXGetShaderSamplers(const DWORD *byte_code, const char **sample
+ #include "d3dcompiler.h"
+@@ -2341,10 +2342,334 @@ HRESULT WINAPI D3DXGetShaderSamplers(const DWORD *byte_code, const char **sample
      return D3D_OK;
  }
  
