@@ -28,8 +28,9 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 11)
 #set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
 
+# check that the ARCH (target architecture) variable is defined
 if(NOT ARCH)
-    set(ARCH i386)
+    message(FATAL_ERROR "Target architecture (ARCH) is not defined. Please, choose one of: i386, amd64, arm")
 endif()
 # Now the ARCH variable will be in lowercase.
 # It is needed because STREQUAL comparison
@@ -38,6 +39,9 @@ endif()
 # for more information.
 string(TOLOWER ${ARCH} ARCH)
 
+# set possible values for cmake GUI
+set_property(CACHE ARCH PROPERTY STRINGS "i386" "amd64" "arm")
+
 # Alternative WinNT-compatible architecture string
 if(ARCH STREQUAL "i386")
     set(WINARCH "x86")
@@ -45,17 +49,21 @@ else()
     set(WINARCH ${ARCH})
 endif()
 
+# set CMAKE_BUILD_TYPE if not set
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to Debug as none was specified.")
+    set(CMAKE_BUILD_TYPE "Debug" CACHE
+        STRING "Choose the type of build." FORCE)
+    # Set the possible values of build type for cmake-gui
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+                 "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
 # Versioning
 include(sdk/include/reactos/version.cmake)
 
 # Compile options
-if(ARCH STREQUAL "i386")
-    include(sdk/cmake/config.cmake)
-elseif(ARCH STREQUAL "amd64")
-    include(sdk/cmake/config-amd64.cmake)
-elseif(ARCH STREQUAL "arm")
-    include(sdk/cmake/config-arm.cmake)
-endif()
+include(sdk/cmake/config.cmake)
 
 # Compiler flags handling
 include(sdk/cmake/compilerflags.cmake)

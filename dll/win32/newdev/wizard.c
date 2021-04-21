@@ -87,6 +87,29 @@ SetFailedInstall(
         return FALSE;
     }
 
+    if (Set)
+    {
+        /* Set the 'Unknown' device class */
+        PWSTR pszUnknown = L"Unknown";
+        SetupDiSetDeviceRegistryPropertyW(DeviceInfoSet,
+                                          DevInfoData,
+                                          SPDRP_CLASS,
+                                          (PBYTE)pszUnknown,
+                                          (wcslen(pszUnknown) + 1) * sizeof(WCHAR));
+
+        PWSTR pszUnknownGuid = L"{4D36E97E-E325-11CE-BFC1-08002BE10318}";
+        SetupDiSetDeviceRegistryPropertyW(DeviceInfoSet,
+                                          DevInfoData,
+                                          SPDRP_CLASSGUID,
+                                          (PBYTE)pszUnknownGuid,
+                                          (wcslen(pszUnknownGuid) + 1) * sizeof(WCHAR));
+
+        /* Set device problem code CM_PROB_FAILED_INSTALL */
+        CM_Set_DevNode_Problem(DevInfoData->DevInst,
+                               CM_PROB_FAILED_INSTALL,
+                               CM_SET_DEVNODE_PROBLEM_OVERRIDE);
+    }
+
     return TRUE;
 }
 
@@ -213,7 +236,6 @@ FindDriverProc(
     IN LPVOID lpParam)
 {
     PDEVINSTDATA DevInstData;
-    DWORD config_flags;
     BOOL result = FALSE;
 
     DevInstData = (PDEVINSTDATA)lpParam;
@@ -227,22 +249,9 @@ FindDriverProc(
     else
     {
         /* Update device configuration */
-        if (SetupDiGetDeviceRegistryProperty(
-            DevInstData->hDevInfo,
-            &DevInstData->devInfoData,
-            SPDRP_CONFIGFLAGS,
-            NULL,
-            (BYTE *)&config_flags,
-            sizeof(config_flags),
-            NULL))
-        {
-            config_flags |= CONFIGFLAG_FAILEDINSTALL;
-            SetupDiSetDeviceRegistryPropertyW(
-                DevInstData->hDevInfo,
-                &DevInstData->devInfoData,
-                SPDRP_CONFIGFLAGS,
-                (BYTE *)&config_flags, sizeof(config_flags));
-        }
+        SetFailedInstall(DevInstData->hDevInfo,
+                         &DevInstData->devInfoData,
+                         TRUE);
 
         PostMessage(DevInstData->hDialog, WM_SEARCH_FINISHED, 0, 0);
     }
