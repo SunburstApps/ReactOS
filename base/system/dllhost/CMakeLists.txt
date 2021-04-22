@@ -1,5 +1,6 @@
 
-add_executable(dllhost dllhost.c dllhost.rc)
+add_executable(dllhost dllhost.cpp dllhost.rc)
 set_module_type(dllhost win32gui UNICODE)
-add_importlibs(dllhost msvcrt kernel32 ntdll)
+target_link_libraries(dllhost cpprt atl_classes uuid)
+add_importlibs(dllhost ole32 user32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET dllhost DESTINATION reactos/system32 FOR all)
