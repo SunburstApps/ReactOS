@@ -117,3 +117,5 @@ coclass StdGlobalInterfaceTable { interface IGlobalInterfaceTable; }
     uuid(0002e005-0000-0000-c000-000000000046)
 ]
 coclass StdComponentCategoriesMgr { interface ICatRegister; interface ICatInformation; }
+
+interface ISurrogate;
