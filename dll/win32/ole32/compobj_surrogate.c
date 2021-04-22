@@ -28,6 +28,39 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
+static DWORD surrogate_rot_key = 0;
+
+static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker)
+{
+    HRESULT hr = S_OK;
+    LPWSTR pid_string;
+    LPMONIKER base_moniker, pid_moniker;
+
+    if (output_moniker == NULL)
+    {
+        hr = E_POINTER;
+        goto out;
+    }
+
+    // FIXME: There is no wasprintfW() or wnsprintfW(), so I do not know how to avoid a buffer overrun issue here.
+    pid_string = calloc(100, sizeof(WCHAR));
+    wsprintfW(pid_string, L"%d", GetCurrentProcessId());
+
+    hr = CreateItemMoniker(L"!", L"COM Surrogates", &base_moniker);
+    if (FAILED(hr)) goto out;
+    hr = CreateItemMoniker(L"!", pid_string, &pid_moniker);
+    if (FAILED(hr)) goto out;
+
+    hr = IMoniker_ComposeWith(base_moniker, pid_moniker, FALSE, output_moniker);
+
+out:
+    if (pid_string != NULL) free(pid_string);
+    if (base_moniker != NULL) IMoniker_Release(base_moniker);
+    if (pid_moniker != NULL) IMoniker_Release(pid_moniker);
+
+    return hr;
+}
+
 /***********************************************************************
  *           CoRegisterSurrogate [OLE32.@]
  */
@@ -36,8 +69,30 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     if (process_surrogate_instance != NULL) return E_FAIL;
     if (surrogate == NULL) return E_POINTER;
 
+    HRESULT hr = S_OK;
+    LPMONIKER moniker;
+    IRunningObjectTable *rot;
+    IUnknown *pUnk;
+
+    hr = get_surrogate_identifier_moniker(&moniker);
+    if (FAILED(hr)) goto out;
+    hr = GetRunningObjectTable(0, &rot);
+    if (FAILED(hr)) goto out;
+
+    hr = ISurrogate_QueryInterface(surrogate, &IID_IUnknown, (void **) &pUnk);
+    if (FAILED(hr)) goto out;
+
+    hr = IRunningObjectTable_Register(rot, 0, pUnk, moniker, &surrogate_rot_key);
+    if (FAILED(hr)) goto out;
+
     process_surrogate_instance = surrogate;
-    return S_OK;
+
+out:
+    if (rot != NULL) IRunningObjectTable_Release(rot);
+    if (moniker != NULL) IMoniker_Release(moniker);
+    if (pUnk != NULL) IUnknown_Release(pUnk);
+
+    return hr;
 }
 
 /***********************************************************************
