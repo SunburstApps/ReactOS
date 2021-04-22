@@ -33,9 +33,11 @@ WINE_DEFAULT_DEBUG_CHANNEL(ole);
  */
 HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
 {
-    FIXME("(%p): stub\n", surrogate);
+    if (process_surrogate_instance != NULL) return E_FAIL;
+    if (surrogate == NULL) return E_POINTER;
 
-    return E_NOTIMPL;
+    process_surrogate_instance = surrogate;
+    return S_OK;
 }
 
 /***********************************************************************
@@ -47,3 +49,5 @@ HRESULT WINAPI CoRegisterSurrogateEx(REFGUID guid, void *reserved)
 
     return E_NOTIMPL;
 }
+
+ISurrogate *process_surrogate_instance = NULL;
