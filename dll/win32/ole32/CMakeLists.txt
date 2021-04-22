@@ -30,6 +30,7 @@ list(APPEND SOURCE
     clipboard.c
     comcat.c
     compobj.c
+    compobj_surrogate.c
     compositemoniker.c
     datacache.c
     defaulthandler.c
