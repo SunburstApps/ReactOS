@@ -5386,6 +5386,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID reserved)
     case DLL_PROCESS_DETACH:
         if (reserved) break;
         release_std_git();
+        revoke_registered_surrogate();
         if(apt_win_class)
             UnregisterClassW( (const WCHAR*)MAKEINTATOM(apt_win_class), hProxyDll );
         RPC_UnregisterAllChannelHooks();

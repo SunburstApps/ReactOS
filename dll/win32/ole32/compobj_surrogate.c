@@ -30,6 +30,23 @@ WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
 static DWORD surrogate_rot_key = 0;
 
+HRESULT revoke_registered_surrogate(void)
+{
+    if (process_surrogate_instance == NULL) return S_OK; // nothing to do
+
+    HRESULT hr = S_OK;
+    LPRUNNINGOBJECTTABLE rot = NULL;
+    hr = GetRunningObjectTable(0, &rot);
+    if (FAILED(hr)) goto out;
+
+    hr = IRunningObjectTable_Revoke(rot, surrogate_rot_key);
+
+out:
+    if (rot != NULL) IRunningObjectTable_Release(rot);
+
+    return hr;
+}
+
 static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker)
 {
     HRESULT hr = S_OK;
