@@ -5253,6 +5253,7 @@ HRESULT WINAPI CoEnableCallCancellation(void *reserved)
     return E_NOTIMPL;
 }
 
+#ifndef __REACTOS__
 /***********************************************************************
  *           CoRegisterSurrogate [OLE32.@]
  */
@@ -5272,6 +5273,7 @@ HRESULT WINAPI CoRegisterSurrogateEx(REFGUID guid, void *reserved)
 
     return E_NOTIMPL;
 }
+#endif
 
 typedef struct {
     IGlobalOptions IGlobalOptions_iface;
