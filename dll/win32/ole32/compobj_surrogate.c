@@ -136,11 +136,11 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, LPVOID *ppv)
     if (FAILED(hr)) goto out;
 
     DWORD size, type;
-    LRESULT status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ, &type, NULL, &size);
+    LRESULT status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ | RRF_NOEXPAND, &type, NULL, &size);
     if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
 
     LPSTR buffer = (LPSTR)calloc(size, sizeof(CHAR));
-    status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ, &type, buffer, &size);
+    status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ | RRF_NOEXPAND, &type, buffer, &size);
     if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
 
     if (strlen(buffer) == 0)
