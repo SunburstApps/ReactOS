@@ -241,13 +241,13 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     if (FAILED(hr)) goto out;
 
     ISurrogate *surrogate;
-    hr = IUnknown_QueryInterface(pUnk, IID_ISurrogate, &surrogate);
+    hr = IUnknown_QueryInterface(pUnk, &IID_ISurrogate, (void **)&surrogate);
     if (FAILED(hr)) goto out;
 
-    hr = ISurrogate_LoadDllServer(surrogate, rclsid);
+    hr = ISurrogate_LoadDllServer(surrogate, clsid);
     if (FAILED(hr)) goto out;
 
-    hr = COM_GetRegisteredClassObject(apt, rclsid, CLSCTX_LOCAL_SERVER, ppv);
+    hr = COM_GetRegisteredClassObject(apt, clsid, CLSCTX_LOCAL_SERVER, (IUnknown **)ppv);
 
 out:
     if (appIdKey != NULL) RegCloseKey(appIdKey);
