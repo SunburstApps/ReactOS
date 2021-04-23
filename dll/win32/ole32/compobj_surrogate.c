@@ -97,7 +97,7 @@ out:
     return hr;
 }
 
-static HRESULT get_surrogate_signal_event(PHANDLE hEvent, INT pid, BOOL create_if_needed)
+static HRESULT get_surrogate_signal_event(PHANDLE hEvent, INT pid)
 {
     if (hEvent == NULL) return E_POINTER;
 
