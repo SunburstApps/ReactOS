@@ -3182,7 +3182,18 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetClassObject(
       return hres;
     }
 
-    /* First try in-process server */
+    /* Next try DLL surrogate */
+    if (process_surrogate_instance == NULL)
+    {
+        hres = get_surrogate_classobject(rclsid, ppv);
+        if (SUCCEEDED(hres))
+        {
+            apartment_release(apt);
+            return hres;
+        }
+    }
+
+    /* Next try in-process server */
     if (CLSCTX_INPROC_SERVER & dwClsContext)
     {
         static const WCHAR wszInprocServer32[] = {'I','n','p','r','o','c','S','e','r','v','e','r','3','2',0};
