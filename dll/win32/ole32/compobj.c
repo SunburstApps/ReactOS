@@ -3183,7 +3183,7 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetClassObject(
     }
 
     /* Next try DLL surrogate */
-    hres = get_surrogate_classobject(rclsid, ppv);
+    hres = get_surrogate_classobject(rclsid, iid, ppv);
     if (SUCCEEDED(hres))
     {
         apartment_release(apt);
