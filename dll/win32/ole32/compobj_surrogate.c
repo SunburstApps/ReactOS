@@ -180,6 +180,7 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     HANDLE hEvent = NULL;
     IMoniker *moniker = NULL;
     IUnknown *pUnk = NULL;
+    IRunningObjectTable *rot = NULL;
     ISurrogate *surrogate = NULL;
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
@@ -237,7 +238,6 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
 
     hr = get_surrogate_identifier_moniker(&moniker, pi.dwProcessId);
     if (FAILED(hr)) goto out;
-    IRunningObjectTable *rot;
     hr = GetRunningObjectTable(0, &rot);
     if (FAILED(hr)) goto out;
 
