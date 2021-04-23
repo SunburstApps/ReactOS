@@ -29,6 +29,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
 static DWORD surrogate_rot_key = 0;
+ISurrogate *process_surrogate_instance = NULL;
 
 HRESULT revoke_registered_surrogate(void)
 {
@@ -40,6 +41,8 @@ HRESULT revoke_registered_surrogate(void)
     if (FAILED(hr)) goto out;
 
     hr = IRunningObjectTable_Revoke(rot, surrogate_rot_key);
+    ISurrogate_Release(process_surrogate_instance);
+    process_surrogate_instance = NULL;
 
 out:
     if (rot != NULL) IRunningObjectTable_Release(rot);
@@ -47,7 +50,7 @@ out:
     return hr;
 }
 
-static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker)
+static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker, INT pid)
 {
     HRESULT hr = S_OK;
     LPWSTR pid_string;
@@ -61,7 +64,7 @@ static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker)
 
     // FIXME: There is no wasprintfW() or wnsprintfW(), so I do not know how to avoid a buffer overrun issue here.
     pid_string = calloc(100, sizeof(WCHAR));
-    wsprintfW(pid_string, L"%d", GetCurrentProcessId());
+    wsprintfW(pid_string, L"%d", pid);
 
     hr = CreateItemMoniker(L"!", L"COM Surrogates", &base_moniker);
     if (FAILED(hr)) goto out;
@@ -91,7 +94,7 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     IRunningObjectTable *rot;
     IUnknown *pUnk;
 
-    hr = get_surrogate_identifier_moniker(&moniker);
+    hr = get_surrogate_identifier_moniker(&moniker, GetCurrentProcessId());
     if (FAILED(hr)) goto out;
     hr = GetRunningObjectTable(0, &rot);
     if (FAILED(hr)) goto out;
@@ -103,6 +106,7 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     if (FAILED(hr)) goto out;
 
     process_surrogate_instance = surrogate;
+    ISurrogate_AddRef(surrogate);
 
 out:
     if (rot != NULL) IRunningObjectTable_Release(rot);
@@ -122,4 +126,43 @@ HRESULT WINAPI CoRegisterSurrogateEx(REFGUID guid, void *reserved)
     return E_NOTIMPL;
 }
 
-ISurrogate *process_surrogate_instance = NULL;
+HRESULT get_surrogate_classobject(REFCLSID clsid, LPVOID *ppv)
+{
+    // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
+    if (process_surrogate_instance != NULL) return E_FAIL;
+
+    HKEY appIdKey = NULL;
+    HRESULT hr = COM_OpenKeyForAppIdFromCLSID(clsid, GENERIC_READ, &appIdKey);
+    if (FAILED(hr)) goto out;
+
+    DWORD size, type;
+    LRESULT status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ, &type, NULL, &size);
+    if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
+
+    LPSTR buffer = (LPSTR)calloc(size, sizeof(CHAR));
+    status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ, &type, buffer, &size);
+    if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
+
+    if (strlen(buffer) == 0)
+    {
+        static const char system_dllhost[] = "%SystemRoot%\\system32\\dllhost.exe";
+        buffer = realloc(buffer, (ARRAY_SIZE(system_dllhost) - 1) * sizeof(CHAR));
+        strcpy(buffer, system_dllhost);
+    }
+
+    int expanded_size = ExpandEnvironmentStringsA(buffer, NULL, 0);
+    if (expanded_size == 0) { hr = HRESULT_FROM_WIN32(GetLastError()); goto out; }
+    LPSTR expanded = (LPSTR)calloc(expanded_size, sizeof(CHAR));
+    expanded_size = ExpandEnvironmentStringsA(buffer, expanded, expanded_size);
+    if (expanded_size == 0) { hr = HRESULT_FROM_WIN32(GetLastError()); goto out; }
+
+    // TODO: Finish me!
+    hr = E_NOTIMPL;
+
+out:
+    if (appIdKey != NULL) RegCloseKey(appIdKey);
+    if (buffer != NULL) free(buffer);
+    if (expanded != NULL) free(expanded);
+
+    return hr;
+}
