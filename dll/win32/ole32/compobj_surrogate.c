@@ -66,8 +66,8 @@ static LPWSTR alloc_formatted_string(LPWSTR format, ...)
 static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker, INT pid)
 {
     HRESULT hr = S_OK;
-    LPWSTR pid_string;
-    LPMONIKER base_moniker, pid_moniker;
+    LPWSTR pid_string = NULL;
+    LPMONIKER base_moniker = NULL, pid_moniker = NULL;
 
     if (output_moniker == NULL)
     {
