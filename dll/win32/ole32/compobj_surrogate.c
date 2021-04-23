@@ -29,7 +29,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(ole);
 
 static DWORD surrogate_rot_key = 0;
-ISurrogate *process_surrogate_instance = NULL;
+static ISurrogate *process_surrogate_instance = NULL;
 
 HRESULT revoke_registered_surrogate(void)
 {
@@ -56,7 +56,7 @@ static LPWSTR alloc_formatted_string(LPWSTR format, ...)
     va_start(ap, format);
 
     LPWSTR buffer = NULL;
-    DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING, format, 0, 0, (LPWSTR)&buffer, 1, &ap);
+    DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING, (LPWSTR)&format, 0, 0, buffer, 1, &ap);
     va_end(ap);
 
     if (result == 0) return NULL;
