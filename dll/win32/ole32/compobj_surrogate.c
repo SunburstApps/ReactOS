@@ -177,6 +177,13 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
     if (process_surrogate_instance != NULL) return E_FAIL;
 
+    APARTMENT *apt;
+    if (!(apt = apartment_get_current_or_mta()))
+    {
+        ERR("COM was not initialized\n");
+        return CO_E_NOTINITIALIZED;
+    }
+
     HKEY appIdKey = NULL;
     HRESULT hr = COM_OpenKeyForAppIdFromCLSID(clsid, GENERIC_READ, &appIdKey);
     if (FAILED(hr)) goto out;
@@ -232,7 +239,15 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     IUnknown *pUnk;
     hr = IRunningObjectTable_GetObject(rot, moniker, &pUnk);
     if (FAILED(hr)) goto out;
-    hr = IUnknown_QueryInterface(pUnk, iid, ppv);
+
+    ISurrogate *surrogate;
+    hr = IUnknown_QueryInterface(pUnk, IID_ISurrogate, &surrogate);
+    if (FAILED(hr)) goto out;
+
+    hr = ISurrogate_LoadDllServer(surrogate, rclsid);
+    if (FAILED(hr)) goto out;
+
+    hr = COM_GetRegisteredClassObject(apt, rclsid, CLSCTX_LOCAL_SERVER, ppv);
 
 out:
     if (appIdKey != NULL) RegCloseKey(appIdKey);
@@ -241,6 +256,7 @@ out:
     if (moniker != NULL) IMoniker_Release(moniker);
     if (rot != NULL) IRunningObjectTable_Release(rot);
     if (pUnk != NULL) IUnknown_Release(pUnk);
+    if (surrogate != NULL) ISurrogate_Release(surrogate);
 
     return hr;
 }
