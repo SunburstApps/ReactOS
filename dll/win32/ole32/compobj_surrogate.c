@@ -149,7 +149,7 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     process_surrogate_instance = surrogate;
     ISurrogate_AddRef(surrogate);
 
-    hr = get_surrogate_signal_event(&hEvent, GetCurrentProcessId(), TRUE);
+    hr = get_surrogate_signal_event(&hEvent, GetCurrentProcessId());
     if (FAILED(hr)) goto out;
     SetEvent(hEvent);
 
@@ -172,7 +172,7 @@ HRESULT WINAPI CoRegisterSurrogateEx(REFGUID guid, void *reserved)
     return E_NOTIMPL;
 }
 
-HRESULT get_surrogate_classobject(REFCLSID clsid, LPVOID *ppv)
+HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
 {
     // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
     if (process_surrogate_instance != NULL) return E_FAIL;
@@ -202,13 +202,45 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, LPVOID *ppv)
     expanded_size = ExpandEnvironmentStringsA(buffer, expanded, expanded_size);
     if (expanded_size == 0) { hr = HRESULT_FROM_WIN32(GetLastError()); goto out; }
 
-    // TODO: Finish me!
-    hr = E_NOTIMPL;
+    STARTUPINFOA si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    // No other STARTUPINFOW fields need to be set AFAICT.
+
+    PROCESS_INFORMATION pi;
+    if (CreateProcessA(expanded, "", NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) == 0)
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        goto out;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    HANDLE hEvent;
+    hr = get_surrogate_signal_event(&hEvent, pi.dwProcessId);
+    if (FAILED(hr)) goto out;
+    WaitForSingleObject(hEvent, INFINITE);
+
+    IMoniker *moniker;
+    hr = get_surrogate_identifier_moniker(&moniker, pi.dwProcessId);
+    if (FAILED(hr)) goto out;
+    IRunningObjectTable *rot;
+    hr = GetRunningObjectTable(0, &rot);
+    if (FAILED(hr)) goto out;
+
+    IUnknown *pUnk;
+    hr = IRunningObjectTable_GetObject(rot, moniker, &pUnk);
+    if (FAILED(hr)) goto out;
+    hr = IUnknown_QueryInterface(pUnk, iid, ppv);
 
 out:
     if (appIdKey != NULL) RegCloseKey(appIdKey);
     if (buffer != NULL) free(buffer);
     if (expanded != NULL) free(expanded);
+    if (moniker != NULL) IMoniker_Release(moniker);
+    if (rot != NULL) IRunningObjectTable_Release(rot);
+    if (pUnk != NULL) IUnknown_Release(pUnk);
 
     return hr;
 }

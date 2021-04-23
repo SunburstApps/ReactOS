@@ -357,6 +357,6 @@ extern HRESULT EnumSTATDATA_Construct(IUnknown *holder, ULONG index, DWORD array
 
 
 extern HRESULT revoke_registered_surrogate(void);
-extern HRESULT get_surrogate_classobject(REFCLSID clsid, LPVOID *ppv) DECLSPEC_HIDDEN;
+extern HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv) DECLSPEC_HIDDEN;
 
 #endif /* __WINE_OLE_COMPOBJ_H */
