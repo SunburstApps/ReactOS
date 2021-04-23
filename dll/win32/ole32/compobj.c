@@ -3183,14 +3183,11 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetClassObject(
     }
 
     /* Next try DLL surrogate */
-    if (process_surrogate_instance == NULL)
+    hres = get_surrogate_classobject(rclsid, ppv);
+    if (SUCCEEDED(hres))
     {
-        hres = get_surrogate_classobject(rclsid, ppv);
-        if (SUCCEEDED(hres))
-        {
-            apartment_release(apt);
-            return hres;
-        }
+        apartment_release(apt);
+        return hres;
     }
 
     /* Next try in-process server */
