@@ -130,10 +130,10 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     if (surrogate == NULL) return E_POINTER;
 
     HRESULT hr = S_OK;
-    LPMONIKER moniker;
-    IRunningObjectTable *rot;
-    IUnknown *pUnk;
-    HANDLE hEvent;
+    LPMONIKER moniker = NULL;
+    IRunningObjectTable *rot = NULL;
+    IUnknown *pUnk = NULL;
+    HANDLE hEvent = NULL;
 
     hr = get_surrogate_identifier_moniker(&moniker, GetCurrentProcessId());
     if (FAILED(hr)) goto out;
