@@ -133,6 +133,7 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     LPMONIKER moniker;
     IRunningObjectTable *rot;
     IUnknown *pUnk;
+    HANDLE hEvent;
 
     hr = get_surrogate_identifier_moniker(&moniker, GetCurrentProcessId());
     if (FAILED(hr)) goto out;
@@ -148,10 +149,15 @@ HRESULT WINAPI CoRegisterSurrogate(ISurrogate *surrogate)
     process_surrogate_instance = surrogate;
     ISurrogate_AddRef(surrogate);
 
+    hr = get_surrogate_signal_event(&hEvent, GetCurrentProcessId(), TRUE);
+    if (FAILED(hr)) goto out;
+    SetEvent(hEvent);
+
 out:
     if (rot != NULL) IRunningObjectTable_Release(rot);
     if (moniker != NULL) IMoniker_Release(moniker);
     if (pUnk != NULL) IUnknown_Release(pUnk);
+    if (hEvent != NULL) CloseHandle(hEvent);
 
     return hr;
 }
