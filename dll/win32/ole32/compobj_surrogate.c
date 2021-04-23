@@ -55,8 +55,8 @@ static LPWSTR alloc_formatted_string(LPWSTR format, ...)
     va_list ap;
     va_start(ap, format);
 
-    LPWSTR buffer;
-    DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING, format, 0, 0, &buffer, 1, &ap);
+    LPWSTR buffer = NULL;
+    DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING, format, 0, 0, buffer, 1, &ap);
     va_end(ap);
 
     if (result == 0) return NULL;
