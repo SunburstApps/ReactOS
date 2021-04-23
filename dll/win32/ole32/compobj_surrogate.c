@@ -97,6 +97,30 @@ out:
     return hr;
 }
 
+static HRESULT get_surrogate_signal_event(PHANDLE hEvent, INT pid, BOOL create_if_needed)
+{
+    if (hEvent == NULL) return E_POINTER;
+
+    HRESULT hr = S_OK;
+    LPWSTR name = alloc_formatted_string(L"COM Surrogate: %1!d!", pid);
+    if (name == NULL)
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        goto out;
+    }
+
+    *hEvent = OpenEventW(SYNCHRONIZE, FALSE, name);
+    if (*hEvent == NULL)
+        *hEvent = CreateEventW(NULL, FALSE, FALSE, name);
+
+    if (*hEvent == NULL)
+        hr = HRESULT_FROM_WIN32(GetLastError());
+
+out:
+    if (name != NULL) LocalFree(name);
+    return hr;
+}
+
 /***********************************************************************
  *           CoRegisterSurrogate [OLE32.@]
  */
