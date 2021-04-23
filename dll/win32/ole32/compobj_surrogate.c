@@ -217,6 +217,9 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     expanded_size = ExpandEnvironmentStringsA(buffer, expanded, expanded_size);
     if (expanded_size == 0) { hr = HRESULT_FROM_WIN32(GetLastError()); goto out; }
 
+    hr = get_surrogate_signal_event(&hEvent, pi.dwProcessId);
+    if (FAILED(hr)) goto out;
+
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     // No other STARTUPINFOW fields need to be set AFAICT.
@@ -229,9 +232,6 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-
-    hr = get_surrogate_signal_event(&hEvent, pi.dwProcessId);
-    if (FAILED(hr)) goto out;
     WaitForSingleObject(hEvent, INFINITE);
 
     hr = get_surrogate_identifier_moniker(&moniker, pi.dwProcessId);
