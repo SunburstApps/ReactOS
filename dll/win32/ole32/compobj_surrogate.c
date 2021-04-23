@@ -185,6 +185,14 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     }
 
     HKEY appIdKey = NULL;
+    LPSTR buffer = NULL, expanded = NULL;
+    HANDLE hEvent = NULL;
+    IMoniker *moniker = NULL;
+    IUnknown *pUnk = NULL;
+    ISurrogate *surrogate = NULL;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+
     HRESULT hr = COM_OpenKeyForAppIdFromCLSID(clsid, GENERIC_READ, &appIdKey);
     if (FAILED(hr)) goto out;
 
@@ -192,7 +200,7 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     LRESULT status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ | RRF_NOEXPAND, &type, NULL, &size);
     if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
 
-    LPSTR buffer = (LPSTR)calloc(size, sizeof(CHAR));
+    buffer = (LPSTR)calloc(size, sizeof(CHAR));
     status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ | RRF_NOEXPAND, &type, buffer, &size);
     if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
 
@@ -205,16 +213,14 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
 
     int expanded_size = ExpandEnvironmentStringsA(buffer, NULL, 0);
     if (expanded_size == 0) { hr = HRESULT_FROM_WIN32(GetLastError()); goto out; }
-    LPSTR expanded = (LPSTR)calloc(expanded_size, sizeof(CHAR));
+    expanded = (LPSTR)calloc(expanded_size, sizeof(CHAR));
     expanded_size = ExpandEnvironmentStringsA(buffer, expanded, expanded_size);
     if (expanded_size == 0) { hr = HRESULT_FROM_WIN32(GetLastError()); goto out; }
 
-    STARTUPINFOA si;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     // No other STARTUPINFOW fields need to be set AFAICT.
 
-    PROCESS_INFORMATION pi;
     if (CreateProcessA(expanded, "", NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi) == 0)
     {
         hr = HRESULT_FROM_WIN32(GetLastError());
@@ -224,23 +230,19 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
-    HANDLE hEvent;
     hr = get_surrogate_signal_event(&hEvent, pi.dwProcessId);
     if (FAILED(hr)) goto out;
     WaitForSingleObject(hEvent, INFINITE);
 
-    IMoniker *moniker;
     hr = get_surrogate_identifier_moniker(&moniker, pi.dwProcessId);
     if (FAILED(hr)) goto out;
     IRunningObjectTable *rot;
     hr = GetRunningObjectTable(0, &rot);
     if (FAILED(hr)) goto out;
 
-    IUnknown *pUnk;
     hr = IRunningObjectTable_GetObject(rot, moniker, &pUnk);
     if (FAILED(hr)) goto out;
 
-    ISurrogate *surrogate;
     hr = IUnknown_QueryInterface(pUnk, &IID_ISurrogate, (void **)&surrogate);
     if (FAILED(hr)) goto out;
 
