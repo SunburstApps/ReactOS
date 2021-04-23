@@ -174,7 +174,7 @@ HRESULT WINAPI CoRegisterSurrogateEx(REFGUID guid, void *reserved)
 
 HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
 {
-    APARTMENT *apt;
+    APARTMENT *apt = NULL;
     HKEY appIdKey = NULL;
     LPSTR buffer = NULL, expanded = NULL;
     HANDLE hEvent = NULL;
@@ -182,10 +182,10 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     IUnknown *pUnk = NULL;
     IRunningObjectTable *rot = NULL;
     ISurrogate *surrogate = NULL;
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    LRESULT status;
-    DWORD size, type;
+    STARTUPINFOA si = {0};
+    PROCESS_INFORMATION pi = {0};
+    LRESULT status = 0;
+    DWORD size = 0, type = 0;
 
     // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
     if (process_surrogate_instance != NULL) return E_FAIL;
