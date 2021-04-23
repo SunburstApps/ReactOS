@@ -174,16 +174,7 @@ HRESULT WINAPI CoRegisterSurrogateEx(REFGUID guid, void *reserved)
 
 HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
 {
-    // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
-    if (process_surrogate_instance != NULL) return E_FAIL;
-
     APARTMENT *apt;
-    if (!(apt = apartment_get_current_or_mta()))
-    {
-        ERR("COM was not initialized\n");
-        return CO_E_NOTINITIALIZED;
-    }
-
     HKEY appIdKey = NULL;
     LPSTR buffer = NULL, expanded = NULL;
     HANDLE hEvent = NULL;
@@ -192,12 +183,22 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     ISurrogate *surrogate = NULL;
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
+    LRESULT status;
+    DWORD size, type;
+
+    // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
+    if (process_surrogate_instance != NULL) return E_FAIL;
+
+    if (!(apt = apartment_get_current_or_mta()))
+    {
+        ERR("COM was not initialized\n");
+        return CO_E_NOTINITIALIZED;
+    }
 
     HRESULT hr = COM_OpenKeyForAppIdFromCLSID(clsid, GENERIC_READ, &appIdKey);
     if (FAILED(hr)) goto out;
 
-    DWORD size, type;
-    LRESULT status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ | RRF_NOEXPAND, &type, NULL, &size);
+    status = RegGetValueA(appIdKey, NULL, "DllSurrogate", RRF_RT_REG_EXPAND_SZ | RRF_RT_REG_SZ | RRF_NOEXPAND, &type, NULL, &size);
     if (status != STATUS_SUCCESS) { hr = HRESULT_FROM_WIN32(status); goto out; }
 
     buffer = (LPSTR)calloc(size, sizeof(CHAR));
