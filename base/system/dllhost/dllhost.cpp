@@ -176,13 +176,13 @@ wWinMain(
 
     // TODO: Call CoInitializeSecurity() here
 
+    hStopEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     CComObject<CStdSurrogate> *surrogate;
     hr = CComObject<CStdSurrogate>::CreateInstance(&surrogate);
     if (FAILED(hr)) return hr;
     hr = CoRegisterSurrogate(surrogate);
     if (FAILED(hr)) return hr;
 
-    hStopEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     while (true) {
         DWORD result = WaitForMultipleObjects(1, &hStopEvent, false, 120000);
         if (result == WAIT_TIMEOUT)
