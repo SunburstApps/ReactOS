@@ -253,6 +253,7 @@ out:
     if (appIdKey != NULL) RegCloseKey(appIdKey);
     if (buffer != NULL) free(buffer);
     if (expanded != NULL) free(expanded);
+    if (hEvent != NULL) CloseHandle(hEvent);
     if (moniker != NULL) IMoniker_Release(moniker);
     if (rot != NULL) IRunningObjectTable_Release(rot);
     if (pUnk != NULL) IUnknown_Release(pUnk);
