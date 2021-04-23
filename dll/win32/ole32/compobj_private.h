@@ -356,7 +356,7 @@ extern HRESULT EnumSTATDATA_Construct(IUnknown *holder, ULONG index, DWORD array
                                       BOOL copy, IEnumSTATDATA **ppenum) DECLSPEC_HIDDEN;
 
 
-extern HRESULT revoke_registered_surrogate(void);
+extern HRESULT revoke_registered_surrogate(void) DECLSPEC_HIDDEN;
 extern HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv) DECLSPEC_HIDDEN;
 extern HRESULT COM_GetRegisteredClassObject(const struct apartment *apt, REFCLSID rclsid, DWORD dwClsContext, LPUNKNOWN* ppUnk) DECLSPEC_HIDDEN;
 
