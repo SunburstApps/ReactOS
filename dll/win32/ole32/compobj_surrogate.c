@@ -50,6 +50,19 @@ out:
     return hr;
 }
 
+static LPWSTR alloc_formatted_string(LPWSTR format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+
+    LPWSTR buffer;
+    DWORD result = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_STRING, format, 0, 0, &buffer, 1, &ap);
+    va_end(ap);
+
+    if (result == 0) return NULL;
+    return buffer;
+}
+
 static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker, INT pid)
 {
     HRESULT hr = S_OK;
@@ -62,9 +75,12 @@ static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker, INT p
         goto out;
     }
 
-    // FIXME: There is no wasprintfW() or wnsprintfW(), so I do not know how to avoid a buffer overrun issue here.
-    pid_string = calloc(100, sizeof(WCHAR));
-    wsprintfW(pid_string, L"%d", pid);
+    pid_string = alloc_formatted_string(L"%1!d!", pid);
+    if (pid_string == NULL)
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        goto out;
+    }
 
     hr = CreateItemMoniker(L"!", L"COM Surrogates", &base_moniker);
     if (FAILED(hr)) goto out;
@@ -74,7 +90,7 @@ static HRESULT get_surrogate_identifier_moniker(LPMONIKER *output_moniker, INT p
     hr = IMoniker_ComposeWith(base_moniker, pid_moniker, FALSE, output_moniker);
 
 out:
-    if (pid_string != NULL) free(pid_string);
+    if (pid_string != NULL) LocalFree(pid_string);
     if (base_moniker != NULL) IMoniker_Release(base_moniker);
     if (pid_moniker != NULL) IMoniker_Release(pid_moniker);
 
