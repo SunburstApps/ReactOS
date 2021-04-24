@@ -1098,10 +1098,12 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoRevokeClassObject(
     return CO_E_NOTINITIALIZED;
   }
 
+#ifdef __REACTOS__
   if (dwRegister & COOKIE_FLAG_IS_SURROGATE_CF)
   {
     return revoke_surrogate_classfactory(dwRegister);
   }
+#endif
 
   EnterCriticalSection( &csRegisteredClassList );
 
@@ -2926,10 +2928,12 @@ HRESULT WINAPI CoRegisterClassObject(
 
   *lpdwRegister = 0;
 
+#ifdef __REACTOS__
   if (flags & REGCLS_SURROGATE)
   {
     return register_surrogate_classfactory(rclsid, pUnk, lpdwRegister);
   }
+#endif
 
   /* REGCLS_MULTIPLEUSE implies registering as inproc server. This is what
    * differentiates the flag from REGCLS_MULTI_SEPARATE. */
@@ -3192,15 +3196,16 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoGetClassObject(
       return hres;
     }
 
-    /* Next try DLL surrogate */
+#ifdef __REACTOS__
     hres = get_surrogate_classobject(rclsid, iid, ppv);
     if (SUCCEEDED(hres))
     {
         apartment_release(apt);
         return hres;
     }
+#endif
 
-    /* Next try in-process server */
+    /* First try in-process server */
     if (CLSCTX_INPROC_SERVER & dwClsContext)
     {
         static const WCHAR wszInprocServer32[] = {'I','n','p','r','o','c','S','e','r','v','e','r','3','2',0};
@@ -5404,7 +5409,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID reserved)
     case DLL_PROCESS_DETACH:
         if (reserved) break;
         release_std_git();
+#ifdef __REACTOS__
         revoke_registered_surrogate();
+#endif
         if(apt_win_class)
             UnregisterClassW( (const WCHAR*)MAKEINTATOM(apt_win_class), hProxyDll );
         RPC_UnregisterAllChannelHooks();

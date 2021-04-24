@@ -118,4 +118,6 @@ coclass StdGlobalInterfaceTable { interface IGlobalInterfaceTable; }
 ]
 coclass StdComponentCategoriesMgr { interface ICatRegister; interface ICatInformation; }
 
+#ifdef __REACTOS__
 interface ISurrogate;
+#endif
