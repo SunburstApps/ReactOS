@@ -359,5 +359,9 @@ extern HRESULT EnumSTATDATA_Construct(IUnknown *holder, ULONG index, DWORD array
 extern HRESULT revoke_registered_surrogate(void) DECLSPEC_HIDDEN;
 extern HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv) DECLSPEC_HIDDEN;
 extern HRESULT COM_GetRegisteredClassObject(const struct apartment *apt, REFCLSID rclsid, DWORD dwClsContext, LPUNKNOWN* ppUnk) DECLSPEC_HIDDEN;
+extern HRESULT register_surrogate_classfactory(REFCLSID clsid, IUnknown *cf, DWORD *pCookie) DECLSPEC_HIDDEN;
+extern HRESULT revoke_surrogate_classfactory(DWORD cookie) DECLSPEC_HIDDEN;
+
+#define COOKIE_FLAG_IS_SURROGATE_CF     0x8000000
 
 #endif /* __WINE_OLE_COMPOBJ_H */
