@@ -179,9 +179,12 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     LPSTR buffer = NULL, expanded = NULL;
     HANDLE hEvent = NULL;
     IMoniker *moniker = NULL;
+    IMoniker *clsid_moniker = NULL;
+    IMoniker *merged_moniker = NULL;
     IUnknown *pUnk = NULL;
     IRunningObjectTable *rot = NULL;
     ISurrogate *surrogate = NULL;
+    IClassFactory *cf = NULL;
     STARTUPINFOA si = {0};
     PROCESS_INFORMATION pi = {0};
     LRESULT status = 0;
@@ -250,7 +253,20 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     hr = ISurrogate_LoadDllServer(surrogate, clsid);
     if (FAILED(hr)) goto out;
 
-    hr = COM_GetRegisteredClassObject(apt, clsid, CLSCTX_LOCAL_SERVER, (IUnknown **)ppv);
+    hr = CreateClassMoniker(clsid, &clsid_moniker);
+    if (FAILED(hr)) goto out;
+
+    hr = IMoniker_ComposeWith(moniker, clsid_moniker, FALSE, &merged_moniker);
+    if (FAILED(hr)) goto out;
+
+    if (pUnk != NULL) IUnknown_Release(pUnk);
+    hr = IRunningObjectTable_GetObject(rot, merged_moniker, &pUnk);
+    if (FAILED(hr)) goto out;
+
+    hr = IUnknown_QueryInterface(pUnk, &IID_IClassFactory, (void **)&cf);
+    if (FAILED(hr)) goto out;
+
+    hr = IClassFactory_CreateInstance(cf, NULL, iid, ppv);
 
 out:
     if (appIdKey != NULL) RegCloseKey(appIdKey);
@@ -258,6 +274,8 @@ out:
     if (expanded != NULL) free(expanded);
     if (hEvent != NULL) CloseHandle(hEvent);
     if (moniker != NULL) IMoniker_Release(moniker);
+    if (clsid_moniker != NULL) IMoniker_Release(clsid_moniker);
+    if (merged_moniker != NULL) IMoniker_Release(merged_moniker);
     if (rot != NULL) IRunningObjectTable_Release(rot);
     if (pUnk != NULL) IUnknown_Release(pUnk);
     if (surrogate != NULL) ISurrogate_Release(surrogate);
