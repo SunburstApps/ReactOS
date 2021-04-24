@@ -2834,8 +2834,8 @@ HRESULT WINAPI CoRegisterPSClsid(REFIID riid, REFCLSID rclsid)
  *                 to normal COM usage, this method will increase the
  *                 reference count on this object.
  */
-HRESULT COM_GetRegisteredClassObject(const struct apartment *apt, REFCLSID rclsid,
-                                     DWORD dwClsContext, LPUNKNOWN* ppUnk)
+static HRESULT COM_GetRegisteredClassObject(const struct apartment *apt, REFCLSID rclsid,
+                                            DWORD dwClsContext, LPUNKNOWN* ppUnk)
 {
   HRESULT hr = S_FALSE;
   RegisteredClass *curClass;
