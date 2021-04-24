@@ -264,3 +264,91 @@ out:
 
     return hr;
 }
+
+typedef struct tagRegisteredSurrogateCF {
+    struct list entry;
+    DWORD cf_cookie;
+    DWORD rot_cookie;
+} RegisteredSurrogateCF;
+
+static struct list RegisteredSurrogateCFList = LIST_INIT(RegisteredSurrogateCFList);
+static DWORD next_cookie = 0;
+
+HRESULT register_surrogate_classfactory(REFCLSID clsid, IUnknown *cf, DWORD *pCookie)
+{
+    HRESULT hr = S_OK;
+    IMoniker *base_moniker = NULL;
+    IMoniker *clsid_moniker = NULL;
+    IMoniker *merged_moniker = NULL;
+    IRunningObjectTable *rot = NULL;
+    DWORD rot_cookie = 0;
+    RegisteredSurrogateCF *entry = NULL;
+
+    hr = get_surrogate_identifier_moniker(&base_moniker, GetCurrentProcessId());
+    if (FAILED(hr)) goto out;
+
+    hr = CreateClassMoniker(clsid, &clsid_moniker);
+    if (FAILED(hr)) goto out;
+
+    hr = IMoniker_ComposeWith(base_moniker, clsid_moniker, FALSE, &merged_moniker);
+    if (FAILED(hr)) goto out;
+
+    hr = GetRunningObjectTable(0, &rot);
+    if (FAILED(hr)) goto out;
+
+    hr = IRunningObjectTable_Register(rot, 0, cf, merged_moniker, &rot_cookie);
+    if (FAILED(hr)) goto out;
+
+    entry = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*entry));
+    if (entry == NULL)
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        goto out;
+    }
+
+    entry->rot_cookie = rot_cookie;
+    entry->cf_cookie = InterlockedIncrement(&next_cookie) | COOKIE_FLAG_IS_SURROGATE_CF;
+    list_add_tail(&RegisteredSurrogateCFList, &entry->entry);
+
+    // Set the entry pointer back to NULL so it isn't deallocated below.
+    entry = NULL;
+    hr = S_OK;
+
+out:
+    if (base_moniker != NULL) IMoniker_Release(base_moniker);
+    if (clsid_moniker != NULL) IMoniker_Release(clsid_moniker);
+    if (merged_moniker != NULL) IMoniker_Release(merged_moniker);
+    if (rot != NULL) IRunningObjectTable_Release(rot);
+    if (entry != NULL) HeapFree(GetProcessHeap(), 0, entry);
+
+    return hr;
+}
+
+HRESULT revoke_surrogate_classfactory(DWORD cookie)
+{
+    HRESULT hr = E_INVALIDARG;
+    RegisteredSurrogateCF *elem;
+    IRunningObjectTable *rot = NULL;
+
+    hr = GetRunningObjectTable(0, &rot);
+    if (FAILED(hr)) goto out;
+
+    cookie = cookie & ~COOKIE_FLAG_IS_SURROGATE_CF;
+    LIST_FOR_EACH_ENTRY(elem, &RegisteredSurrogateCFList, RegisteredSurrogateCF, entry)
+    {
+        if (elem->cf_cookie == cookie)
+        {
+            IRunningObjectTable_Revoke(rot, elem->rot_cookie);
+            list_remove(&elem->entry);
+            HeapFree(GetProcessHeap(), 0, elem);
+
+            hr = S_OK;
+            break;
+        }
+    }
+
+out:
+    if (rot != NULL) IRunningObjectTable_Release(rot);
+
+    return hr;
+}

@@ -1098,6 +1098,11 @@ HRESULT WINAPI DECLSPEC_HOTPATCH CoRevokeClassObject(
     return CO_E_NOTINITIALIZED;
   }
 
+  if (dwRegister & COOKIE_FLAG_IS_SURROGATE_CF)
+  {
+    return revoke_surrogate_classfactory(dwRegister);
+  }
+
   EnterCriticalSection( &csRegisteredClassList );
 
   LIST_FOR_EACH_ENTRY(curClass, &RegisteredClassList, RegisteredClass, entry)
@@ -2920,6 +2925,11 @@ HRESULT WINAPI CoRegisterClassObject(
   }
 
   *lpdwRegister = 0;
+
+  if (flags & REGCLS_SURROGATE)
+  {
+    return register_surrogate_classfactory(rclsid, pUnk, lpdwRegister);
+  }
 
   /* REGCLS_MULTIPLEUSE implies registering as inproc server. This is what
    * differentiates the flag from REGCLS_MULTI_SEPARATE. */
