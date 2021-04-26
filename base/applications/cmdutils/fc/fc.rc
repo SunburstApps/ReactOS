@@ -1,25 +1,17 @@
 #include <windef.h>
 #include "resource.h"
 
-#define REACTOS_STR_FILE_DESCRIPTION  "ReactOS Control ACLs Program"
-#define REACTOS_STR_INTERNAL_NAME     "cacls"
-#define REACTOS_STR_ORIGINAL_FILENAME "cacls.exe"
+#define REACTOS_STR_FILE_DESCRIPTION    "ReactOS FC Command"
+#define REACTOS_STR_INTERNAL_NAME       "fc"
+#define REACTOS_STR_ORIGINAL_FILENAME   "fc.exe"
 #include <reactos/version.rc>
 
-/* UTF-8 */
-#pragma code_page(65001)
-
+#pragma code_page(65001) /* UTF-8 */
 #ifdef LANGUAGE_BG_BG
     #include "lang/bg-BG.rc"
 #endif
-#ifdef LANGUAGE_CA_ES
-    #include "lang/ca-ES.rc"
-#endif
 #ifdef LANGUAGE_CS_CZ
     #include "lang/cs-CZ.rc"
-#endif
-#ifdef LANGUAGE_DA_DK
-    #include "lang/da-DK.rc"
 #endif
 #ifdef LANGUAGE_DE_DE
     #include "lang/de-DE.rc"
@@ -27,14 +19,26 @@
 #ifdef LANGUAGE_EL_GR
     #include "lang/el-GR.rc"
 #endif
+#ifdef LANGUAGE_EN_GB
+    #include "lang/en-GB.rc"
+#endif
 #ifdef LANGUAGE_EN_US
     #include "lang/en-US.rc"
 #endif
 #ifdef LANGUAGE_ES_ES
     #include "lang/es-ES.rc"
 #endif
+#ifdef LANGUAGE_ET_EE
+    #include "lang/et-EE.rc"
+#endif
 #ifdef LANGUAGE_FR_FR
     #include "lang/fr-FR.rc"
+#endif
+#ifdef LANGUAGE_HE_IL
+    #include "lang/he-IL.rc"
+#endif
+#ifdef LANGUAGE_HU_HU
+    #include "lang/hu-HU.rc"
 #endif
 #ifdef LANGUAGE_ID_ID
     #include "lang/id-ID.rc"
@@ -44,9 +48,6 @@
 #endif
 #ifdef LANGUAGE_JA_JP
     #include "lang/ja-JP.rc"
-#endif
-#ifdef LANGUAGE_KO_KR
-    #include "lang/ko-KR.rc"
 #endif
 #ifdef LANGUAGE_NL_NL
     #include "lang/nl-NL.rc"
@@ -60,6 +61,9 @@
 #ifdef LANGUAGE_PT_BR
     #include "lang/pt-BR.rc"
 #endif
+#ifdef LANGUAGE_PT_PT
+    #include "lang/pt-PT.rc"
+#endif
 #ifdef LANGUAGE_RO_RO
     #include "lang/ro-RO.rc"
 #endif
@@ -69,14 +73,11 @@
 #ifdef LANGUAGE_SK_SK
     #include "lang/sk-SK.rc"
 #endif
-#ifdef LANGUAGE_SV_SE
-    #include "lang/sv-SE.rc"
-#endif
 #ifdef LANGUAGE_SQ_AL
     #include "lang/sq-AL.rc"
 #endif
-#ifdef LANGUAGE_SR_SP
-    #include "lang/sr-SP.rc"
+#ifdef LANGUAGE_SV_SE
+    #include "lang/sv-SE.rc"
 #endif
 #ifdef LANGUAGE_TR_TR
     #include "lang/tr-TR.rc"

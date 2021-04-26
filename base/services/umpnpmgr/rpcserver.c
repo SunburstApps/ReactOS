@@ -3007,11 +3007,13 @@ SetupDeviceInstance(
     _In_ LPWSTR pszDeviceInstance,
     _In_ DWORD ulMinorAction)
 {
+    PLUGPLAY_CONTROL_DEVICE_CONTROL_DATA ControlData;
     HKEY hDeviceKey = NULL;
     DWORD dwDisableCount, dwSize;
     DWORD ulStatus, ulProblem;
     DWORD dwError;
     CONFIGRET ret = CR_SUCCESS;
+    NTSTATUS Status;
 
     DPRINT1("SetupDeviceInstance(%S 0x%08lx)\n",
             pszDeviceInstance, ulMinorAction);
@@ -3066,8 +3068,14 @@ SetupDeviceInstance(
     if (ret != CR_SUCCESS)
         goto done;
 
-
-    /* FIXME: Start the device */
+    /* Start the device */
+    RtlInitUnicodeString(&ControlData.DeviceInstance,
+                         pszDeviceInstance);
+    Status = NtPlugPlayControl(PlugPlayControlStartDevice,
+                               &ControlData,
+                               sizeof(PLUGPLAY_CONTROL_DEVICE_CONTROL_DATA));
+    if (!NT_SUCCESS(Status))
+        ret = NtStatusToCrError(Status);
 
 done:
     if (hDeviceKey != NULL)
@@ -3188,7 +3196,7 @@ PNP_GetDeviceStatus(
     UNREFERENCED_PARAMETER(hBinding);
     UNREFERENCED_PARAMETER(ulFlags);
 
-    DPRINT("PNP_GetDeviceStatus(%p %S %p %p)\n",
+    DPRINT("PNP_GetDeviceStatus(%p %S %p %p 0x%08lx)\n",
            hBinding, pDeviceID, pulStatus, pulProblem, ulFlags);
 
     if (!IsValidDeviceInstanceID(pDeviceID))
@@ -3207,8 +3215,47 @@ PNP_SetDeviceProblem(
     DWORD ulProblem,
     DWORD ulFlags)
 {
-    UNIMPLEMENTED;
-    return CR_CALL_NOT_IMPLEMENTED;
+    ULONG ulOldStatus, ulOldProblem;
+    CONFIGRET ret = CR_SUCCESS;
+
+    UNREFERENCED_PARAMETER(hBinding);
+
+    DPRINT1("PNP_SetDeviceProblem(%p %S %lu 0x%08lx)\n",
+           hBinding, pDeviceID, ulProblem, ulFlags);
+
+    if (ulFlags & ~CM_SET_DEVNODE_PROBLEM_BITS)
+        return CR_INVALID_FLAG;
+
+    if (!IsValidDeviceInstanceID(pDeviceID))
+        return CR_INVALID_DEVINST;
+
+    ret = GetDeviceStatus(pDeviceID,
+                          &ulOldStatus,
+                          &ulOldProblem);
+    if (ret != CR_SUCCESS)
+        return ret;
+
+    if (((ulFlags & CM_SET_DEVNODE_PROBLEM_OVERRIDE) == 0) &&
+        (ulOldProblem != 0) &&
+        (ulOldProblem != ulProblem))
+    {
+        return CR_FAILURE;
+    }
+
+    if (ulProblem == 0)
+    {
+        ret = ClearDeviceStatus(pDeviceID,
+                                DN_HAS_PROBLEM,
+                                ulOldProblem);
+    }
+    else
+    {
+        ret = SetDeviceStatus(pDeviceID,
+                              DN_HAS_PROBLEM,
+                              ulProblem);
+    }
+
+    return ret;
 }
 
 
