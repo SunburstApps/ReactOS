@@ -1,0 +1,24 @@
+/*
+ * PROJECT:         ReactOS api tests
+ * LICENSE:         GPLv2+ - See COPYING in the top level directory
+ * PURPOSE:         COM interface test
+ * PROGRAMMER:      William Kent <wjk011@gmail.com>
+ */
+
+import "ocidl.idl";
+
+[uuid(B4312BDD-61BD-42ED-8A64-99FC377696BF), object]
+interface IComTestInterface {
+    HRESULT GetProcID([out, retval] DWORD *pdword);
+};
+
+
+[uuid(79EACDBD-5784-409F-8372-8C564052823F)]
+library rostests {
+    [uuid(EB2FF443-A77D-4971-AC74-8AEFA78813CB)]
+    coclass ComTestClass {
+        interface IComTestInterface;
+    };
+};
+
+cpp_quote("DEFINE_GUID(APPID_RosTests, 0x59D825D4, 0x5096, 0x4BE9, 0x8F, 0x7D, 0x32, 0x12, 0xE7, 0x35, 0x2D, 0x69);")

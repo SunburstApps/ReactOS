@@ -1,0 +1,4 @@
+#include "resource.h"
+
+1 TYPELIB "comtest.tlb"
+IDR_COM_TEST_CLASS REGISTRY "comtest.rgs"

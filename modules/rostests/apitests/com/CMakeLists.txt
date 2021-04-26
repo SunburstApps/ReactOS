@@ -1,4 +1,6 @@
 
+add_subdirectory(com_library)
+
 add_definitions(-DWINE_NO_UNICODE_MACROS)
 
 list(APPEND SOURCE
