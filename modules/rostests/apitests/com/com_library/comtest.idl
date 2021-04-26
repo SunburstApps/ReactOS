@@ -8,7 +8,7 @@
 import "ocidl.idl";
 
 [uuid(B4312BDD-61BD-42ED-8A64-99FC377696BF), object]
-interface IComTestInterface {
+interface IComTestInterface : IUnknown {
     HRESULT GetProcID([out, retval] DWORD *pdword);
 };
 

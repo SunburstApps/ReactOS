@@ -17,6 +17,10 @@ set_source_files_properties(comtest.rc PROPERTIES OBJECT_DEPENDS "${comtest_rc_d
 
 add_library(com_test_library MODULE ${SOURCE})
 target_link_libraries(com_test_library atl_classes cpprt uuid)
+if(MSVC)
+    target_link_libraries(com_test_library runtmchk)
+endif()
+
 add_dependencies(com_test_library rostests_com_library_idl)
 add_importlibs(com_test_library advapi32 ole32 shlwapi shell32 msvcrt kernel32 ntdll)
 add_rostests_file(TARGET com_test_library)
