@@ -1,0 +1,45 @@
+HKCR
+{
+    NoRemove AppID
+    {
+        '{12812DAB-BCF1-4B3C-BA30-A80FFCD344C2}'
+        {
+            val DllSurrogate = s ''
+        }
+    }
+
+    NoRemove CLSID
+    {
+        ForceRemove '{EB2FF443-A77D-4971-AC74-8AEFA78813CB}' = s 'ComTestClass'
+        {
+            InprocServer32 = s '%MODULE%'
+            TypeLib = s '{79EACDBD-5784-409F-8372-8C564052823F}'
+            Version = s '1.0'
+
+            val AppID = s '{12812DAB-BCF1-4B3C-BA30-A80FFCD344C2}'
+        }
+    }
+
+    NoRemove Interface
+    {
+        ForceRemove '{B4312BDD-61BD-42ED-8A64-99FC377696BF}' = s 'IComTestInterface'
+        {
+            NumMethods = s '1'
+            ProxyStubClsid = s '{00020424-0000-0000-C000-000000000046}'
+            ProxyStubClsid32 = s '{00020424-0000-0000-C000-000000000046}'
+            TypeLib = '{79EACDBD-5784-409F-8372-8C564052823F}' { val 'Version' = s '1.0' }
+        }
+    }
+
+    NoRemove Typelib
+    {
+        ForceRemove '{79EACDBD-5784-409F-8372-8C564052823F}' = s 'ComTestLibrary'
+        {
+            '1.0' = s 'COM Test Library'
+            {
+                '0' { win32 = s '%MODULE%' }
+                FLAGS = s '0'
+            }
+        }
+    }
+}
