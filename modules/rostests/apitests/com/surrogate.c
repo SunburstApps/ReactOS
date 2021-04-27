@@ -48,7 +48,7 @@ START_TEST(DllSurrogate)
         return;
     }
 
-    IComTestInterface *iface;
+    IComTestInterface *iface = NULL;
     hr = CoCreateInstance(&CLSID_ComTestClass, NULL, CLSCTX_INPROC, &IID_IComTestInterface, (void **)iface);
     ok(hr == S_OK, "CoCreateInstance() failed with hr 0x%lx\n", hr);
     if (!myskip(hr == S_OK, "Could not create ComTestClass instance\n"))
