@@ -12,9 +12,11 @@ extern void func_ole32(void);
 extern void func_shdocvw(void);
 extern void func_shell32(void);
 extern void func_zipfldr(void);
+extern void func_DllSurrogate(void);
 
 const struct test winetest_testlist[] =
 {
+    { "DllSurrogate", func_DllSurrogate },
     { "browseui", func_browseui },
     { "ieframe", func_ieframe },
     { "interfaces", func_interfaces },
