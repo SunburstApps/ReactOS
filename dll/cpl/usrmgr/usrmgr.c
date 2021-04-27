@@ -59,7 +59,7 @@ PropSheetProc(HWND hwndDlg, UINT uMsg, LPARAM lParam)
 static LONG APIENTRY
 UsrmgrApplet(HWND hwnd, UINT uMsg, LPARAM wParam, LPARAM lParam)
 {
-    PROPSHEETPAGE psp[2];
+    PROPSHEETPAGE psp[3];
     PROPSHEETHEADER psh;
     TCHAR Caption[1024];
 
@@ -76,14 +76,20 @@ UsrmgrApplet(HWND hwnd, UINT uMsg, LPARAM wParam, LPARAM lParam)
     psh.hInstance = hApplet;
     psh.pszIcon = MAKEINTRESOURCEW(IDI_USRMGR_ICON);
     psh.pszCaption = Caption;
-    psh.nPages = sizeof(psp) / sizeof(PROPSHEETPAGE);
     psh.nStartPage = 0;
     psh.ppsp = psp;
     psh.pfnCallback = PropSheetProc;
 
-    InitPropSheetPage(&psp[0], IDD_USERS, UsersPageProc);
-    InitPropSheetPage(&psp[1], IDD_GROUPS, GroupsPageProc);
-    /* InitPropSheetPage(&psp[2], IDD_EXTRA, ExtraPageProc); */
+    InitPropSheetPage(&psp[0], IDD_CONSOLE_USER, ConsoleUserPageProc);
+    psh.nPages = 1;
+
+    if (IsUserAnAdmin())
+    {
+        InitPropSheetPage(&psp[1], IDD_USERS, UsersPageProc);
+        InitPropSheetPage(&psp[2], IDD_GROUPS, GroupsPageProc);
+        /* InitPropSheetPage(&psp[2], IDD_EXTRA, ExtraPageProc); */
+        psh.nPages = 3;
+    }
 
     return (LONG)(PropertySheet(&psh) != -1);
 }

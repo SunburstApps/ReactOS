@@ -3,6 +3,7 @@ include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/wine)
 spec2def(usrmgr.cpl usrmgr.spec)
 
 list(APPEND SOURCE
+    consoleuser.c
     extra.c
     groupprops.c
     groups.c
@@ -21,6 +22,6 @@ add_library(usrmgr MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/usrmgr.def)
 
 set_module_type(usrmgr cpl UNICODE)
-add_importlibs(usrmgr advapi32 user32 gdi32 comctl32 netapi32 msvcrt kernel32 ntdll)
+add_importlibs(usrmgr advapi32 user32 gdi32 comctl32 netapi32 shell32 secur32 msvcrt kernel32 ntdll)
 add_pch(usrmgr usrmgr.h SOURCE)
 add_cd_file(TARGET usrmgr DESTINATION reactos/system32 FOR all)

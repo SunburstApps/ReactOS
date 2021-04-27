@@ -26,7 +26,7 @@ typedef struct _USER_DATA
 
 
 
-static BOOL
+BOOL
 CheckPasswords(HWND hwndDlg,
                INT nIdDlgItem1,
                INT nIdDlgItem2)
