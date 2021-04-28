@@ -37,20 +37,45 @@
 #define _SEH2_LEAVE __leave
 #define _SEH2_VOLATILE
 
+#elif defined(__GNUC__) && !defined(__clang__) && defined(_M_AMD64)
+
+#include "pseh2_64.h"
+
 #elif defined(_USE_DUMMY_PSEH) || defined (__arm__) || defined(_M_AMD64)
 
 extern int _SEH2_Volatile0;
 extern int _SEH2_VolatileExceptionCode;
 
-#define _SEH2_TRY  {
-#define _SEH2_FINALLY }  {
-#define _SEH2_EXCEPT(...) } if (_SEH2_Volatile0 || (0 && (__VA_ARGS__))) {
-#define _SEH2_END }
+#define _SEH2_TRY                                   \
+_Pragma("GCC diagnostic push")                      \
+_Pragma("GCC diagnostic ignored \"-Wunused-label\"")\
+{                                                   \
+    __label__ __seh2_scope_end__;
+
+#define _SEH2_FINALLY                               \
+    __seh2_scope_end__:;                            \
+    }                                               \
+    if (1)                                          \
+    {                                               \
+        __label__ __seh2_scope_end__;
+
+#define _SEH2_EXCEPT(...)                           \
+    __seh2_scope_end__:;                            \
+    }                                               \
+    if (_SEH2_Volatile0 || (0 && (__VA_ARGS__)))    \
+    {                                               \
+        __label__ __seh2_scope_end__;
+
+#define _SEH2_END                                   \
+    __seh2_scope_end__:;                            \
+    }                                               \
+_Pragma("GCC diagnostic pop")
+
 #define _SEH2_GetExceptionInformation() ((struct _EXCEPTION_POINTERS*)0)
 #define _SEH2_GetExceptionCode() _SEH2_VolatileExceptionCode
 #define _SEH2_AbnormalTermination() (0)
 #define _SEH2_YIELD(STMT_) STMT_
-#define _SEH2_LEAVE
+#define _SEH2_LEAVE goto __seh2_scope_end__;
 #define _SEH2_VOLATILE volatile
 
 #elif defined(_USE_PSEH3)
