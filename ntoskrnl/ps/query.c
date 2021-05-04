@@ -56,11 +56,12 @@ PsReferenceProcessFilePointer(IN PEPROCESS Process,
  */
 NTSTATUS
 NTAPI
-NtQueryInformationProcess(IN HANDLE ProcessHandle,
-                          IN PROCESSINFOCLASS ProcessInformationClass,
-                          OUT PVOID ProcessInformation,
-                          IN ULONG ProcessInformationLength,
-                          OUT PULONG ReturnLength OPTIONAL)
+NtQueryInformationProcess(
+    _In_ HANDLE ProcessHandle,
+    _In_ PROCESSINFOCLASS ProcessInformationClass,
+    _Out_ PVOID ProcessInformation,
+    _In_ ULONG ProcessInformationLength,
+    _Out_opt_ PULONG ReturnLength)
 {
     PEPROCESS Process;
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
@@ -577,13 +578,9 @@ NtQueryInformationProcess(IN HANDLE ProcessHandle,
                 {
                     /* Get the exception code */
                     Status = _SEH2_GetExceptionCode();
+                    _SEH2_YIELD(break);
                 }
                 _SEH2_END;
-
-                if (!NT_SUCCESS(Status))
-                {
-                    break;
-                }
 
                 /* Only one flag is supported and it needs LUID mappings */
                 if ((Flags & ~PROCESS_LUID_DOSDEVICES_ONLY) != 0 ||
@@ -2021,7 +2018,6 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                        IN ULONG ThreadInformationLength)
 {
     PETHREAD Thread;
-    ULONG Access;
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     NTSTATUS Status;
     HANDLE TokenHandle = NULL;
@@ -2036,6 +2032,7 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
     ULONG_PTR TlsIndex = 0;
     PVOID *ExpansionSlots;
     PETHREAD ProcThread;
+    BOOLEAN HasPrivilege;
     PAGED_CODE();
 
     /* Verify Information Class validity */
@@ -2048,23 +2045,6 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                                        PreviousMode);
     if (!NT_SUCCESS(Status)) return Status;
 #endif
-
-    /* Check what class this is */
-    Access = THREAD_SET_INFORMATION;
-    if (ThreadInformationClass == ThreadImpersonationToken)
-    {
-        /* Setting the impersonation token needs a special mask */
-        Access = THREAD_SET_THREAD_TOKEN;
-    }
-
-    /* Reference the thread */
-    Status = ObReferenceObjectByHandle(ThreadHandle,
-                                       Access,
-                                       PsThreadType,
-                                       PreviousMode,
-                                       (PVOID*)&Thread,
-                                       NULL);
-    if (!NT_SUCCESS(Status)) return Status;
 
     /* Check what kind of information class this is */
     switch (ThreadInformationClass)
@@ -2102,8 +2082,35 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            /* Check for the required privilege */
+            if (Priority >= LOW_REALTIME_PRIORITY)
+            {
+                HasPrivilege = SeCheckPrivilegedObject(SeIncreaseBasePriorityPrivilege,
+                                                       ThreadHandle,
+                                                       THREAD_SET_INFORMATION,
+                                                       PreviousMode);
+                if (!HasPrivilege)
+                {
+                    DPRINT1("Privilege to change priority to %lx lacking\n", Priority);
+                    return STATUS_PRIVILEGE_NOT_HELD;
+                }
+            }
+
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Set the priority */
             KeSetPriorityThread(&Thread->Tcb, Priority);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadBasePriority:
@@ -2148,8 +2155,21 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 }
             }
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Set the base priority */
             KeSetBasePriorityThread(&Thread->Tcb, Priority);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadAffinityMask:
@@ -2182,6 +2202,16 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
+
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
 
             /* Get the process */
             Process = Thread->ThreadsProcess;
@@ -2217,7 +2247,8 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_PROCESS_IS_TERMINATING;
             }
 
-            /* Return status */
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadImpersonationToken:
@@ -2243,8 +2274,21 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
             }
             _SEH2_END;
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_THREAD_TOKEN,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Assign the actual token */
             Status = PsAssignImpersonationToken(Thread, TokenHandle);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadQuerySetWin32StartAddress:
@@ -2270,8 +2314,21 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
             }
             _SEH2_END;
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Set the address */
             Thread->Win32StartAddress = Address;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadIdealProcessor:
@@ -2305,6 +2362,16 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Set the ideal */
             Status = KeSetIdealProcessorThread(&Thread->Tcb,
                                                (CCHAR)IdealProcessor);
@@ -2320,6 +2387,8 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 ExReleaseRundownProtection(&Thread->RundownProtect);
             }
 
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadPriorityBoost:
@@ -2345,8 +2414,21 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
             }
             _SEH2_END;
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Call the kernel */
             KeSetDisableBoostThread(&Thread->Tcb, (BOOLEAN)DisableBoost);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadZeroTlsCell:
@@ -2379,6 +2461,16 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
+
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
 
             /* Get the process */
             Process = Thread->ThreadsProcess;
@@ -2424,7 +2516,8 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 ProcThread = PsGetNextProcessThread(Process, ProcThread);
             }
 
-            /* All done */
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadBreakOnTermination:
@@ -2458,6 +2551,16 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Set or clear the flag */
             if (Break)
             {
@@ -2467,6 +2570,9 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
             {
                 PspClearCrossThreadFlag(Thread, CT_BREAK_ON_TERMINATION_BIT);
             }
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadHideFromDebugger:
@@ -2478,8 +2584,21 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            /* Reference the thread */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               THREAD_SET_INFORMATION,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Set the flag */
             PspSetCrossThreadFlag(Thread, CT_HIDE_FROM_DEBUGGER_BIT);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         default:
@@ -2488,8 +2607,6 @@ NtSetInformationThread(IN HANDLE ThreadHandle,
             Status = STATUS_NOT_IMPLEMENTED;
     }
 
-    /* Dereference and return status */
-    ObDereferenceObject(Thread);
     return Status;
 }
 
@@ -2541,15 +2658,6 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
     /* Check what class this is */
     Access = THREAD_QUERY_INFORMATION;
 
-    /* Reference the process */
-    Status = ObReferenceObjectByHandle(ThreadHandle,
-                                       Access,
-                                       PsThreadType,
-                                       PreviousMode,
-                                       (PVOID*)&Thread,
-                                       NULL);
-    if (!NT_SUCCESS(Status)) return Status;
-
     /* Check what kind of information class this is */
     switch (ThreadInformationClass)
     {
@@ -2564,6 +2672,17 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
+
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Protect writes with SEH */
             _SEH2_TRY
             {
@@ -2581,6 +2700,9 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         /* Thread time information */
@@ -2594,6 +2716,17 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
+
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Protect writes with SEH */
             _SEH2_TRY
             {
@@ -2618,6 +2751,9 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadQuerySetWin32StartAddress:
@@ -2630,6 +2766,17 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
+
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Protect write with SEH */
             _SEH2_TRY
             {
@@ -2642,6 +2789,9 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadPerformanceCount:
@@ -2654,6 +2804,17 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
+
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Protect write with SEH */
             _SEH2_TRY
             {
@@ -2666,6 +2827,9 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadAmILastThread:
@@ -2678,6 +2842,17 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
+
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Protect write with SEH */
             _SEH2_TRY
             {
@@ -2694,6 +2869,9 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadIsIoPending:
@@ -2706,6 +2884,17 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
+
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Raise the IRQL to protect the IRP list */
             KeRaiseIrql(APC_LEVEL, &OldIrql);
 
@@ -2724,17 +2913,33 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
 
             /* Lower IRQL back */
             KeLowerIrql(OldIrql);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         /* LDT and GDT information */
         case ThreadDescriptorTableEntry:
 
 #if defined(_X86_)
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             /* Call the worker routine */
             Status = PspQueryDescriptorThread(Thread,
                                               ThreadInformation,
                                               ThreadInformationLength,
                                               ReturnLength);
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
 #else
             /* Only implemented on x86 */
             Status = STATUS_NOT_IMPLEMENTED;
@@ -2752,6 +2957,16 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             _SEH2_TRY
             {
                 *(PULONG)ThreadInformation = Thread->Tcb.DisableBoost ? 1 : 0;
@@ -2761,6 +2976,9 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 Status = _SEH2_GetExceptionCode();
             }
             _SEH2_END;
+
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         case ThreadIsTerminated:
@@ -2774,6 +2992,16 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
                 break;
             }
 
+            /* Reference the process */
+            Status = ObReferenceObjectByHandle(ThreadHandle,
+                                               Access,
+                                               PsThreadType,
+                                               PreviousMode,
+                                               (PVOID*)&Thread,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                break;
+
             ThreadTerminated = PsIsThreadTerminating(Thread);
 
             _SEH2_TRY
@@ -2786,6 +3014,8 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
             }
             _SEH2_END;
 
+            /* Dereference the thread */
+            ObDereferenceObject(Thread);
             break;
 
         /* Anything else */
@@ -2809,8 +3039,6 @@ NtQueryInformationThread(IN HANDLE ThreadHandle,
     }
     _SEH2_END;
 
-    /* Dereference the thread, and return */
-    ObDereferenceObject(Thread);
     return Status;
 }
 

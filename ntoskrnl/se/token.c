@@ -41,42 +41,42 @@ static GENERIC_MAPPING SepTokenMapping = {
 static const INFORMATION_CLASS_INFO SeTokenInformationClass[] = {
 
     /* Class 0 not used, blame MS! */
-    ICI_SQ_SAME( 0, 0, 0),
+    IQS_SAME(0, 0, 0),
 
     /* TokenUser */
-    ICI_SQ_SAME( sizeof(TOKEN_USER),                   sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_USER, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE),
     /* TokenGroups */
-    ICI_SQ_SAME( sizeof(TOKEN_GROUPS),                 sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_GROUPS, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE),
     /* TokenPrivileges */
-    ICI_SQ_SAME( sizeof(TOKEN_PRIVILEGES),             sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_PRIVILEGES, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE),
     /* TokenOwner */
-    ICI_SQ_SAME( sizeof(TOKEN_OWNER),                  sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_OWNER, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET | ICIF_SET_SIZE_VARIABLE),
     /* TokenPrimaryGroup */
-    ICI_SQ_SAME( sizeof(TOKEN_PRIMARY_GROUP),          sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_PRIMARY_GROUP, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET | ICIF_SET_SIZE_VARIABLE),
     /* TokenDefaultDacl */
-    ICI_SQ_SAME( sizeof(TOKEN_DEFAULT_DACL),           sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_DEFAULT_DACL, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET | ICIF_SET_SIZE_VARIABLE),
     /* TokenSource */
-    ICI_SQ_SAME( sizeof(TOKEN_SOURCE),                 sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_SOURCE, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE),
     /* TokenType */
-    ICI_SQ_SAME( sizeof(TOKEN_TYPE),                   sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_TYPE, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenImpersonationLevel */
-    ICI_SQ_SAME( sizeof(SECURITY_IMPERSONATION_LEVEL), sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(SECURITY_IMPERSONATION_LEVEL, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenStatistics */
-    ICI_SQ_SAME( sizeof(TOKEN_STATISTICS),             sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_STATISTICS, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE | ICIF_SET_SIZE_VARIABLE),
     /* TokenRestrictedSids */
-    ICI_SQ_SAME( sizeof(TOKEN_GROUPS),                 sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_GROUPS, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenSessionId */
-    ICI_SQ_SAME( sizeof(ULONG),                        sizeof(ULONG), ICIF_QUERY | ICIF_SET ),
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY | ICIF_SET),
     /* TokenGroupsAndPrivileges */
-    ICI_SQ_SAME( sizeof(TOKEN_GROUPS_AND_PRIVILEGES),  sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_GROUPS_AND_PRIVILEGES, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenSessionReference */
-    ICI_SQ_SAME( sizeof(ULONG),                        sizeof(ULONG), ICIF_SET | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(ULONG, ULONG, ICIF_SET | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenSandBoxInert */
-    ICI_SQ_SAME( sizeof(ULONG),                        sizeof(ULONG), ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(ULONG, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenAuditPolicy */
-    ICI_SQ_SAME( /* FIXME */0,                         sizeof(ULONG), ICIF_QUERY | ICIF_SET | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(/* FIXME */0, ULONG, ICIF_QUERY | ICIF_SET | ICIF_QUERY_SIZE_VARIABLE),
     /* TokenOrigin */
-    ICI_SQ_SAME( sizeof(TOKEN_ORIGIN),                 sizeof(ULONG), ICIF_QUERY | ICIF_SET | ICIF_QUERY_SIZE_VARIABLE ),
+    IQS_SAME(TOKEN_ORIGIN, ULONG, ICIF_QUERY | ICIF_SET | ICIF_QUERY_SIZE_VARIABLE),
 };
 
 /* FUNCTIONS *****************************************************************/
@@ -636,7 +636,8 @@ SeExchangePrimaryToken(
     /* Mark new token in use */
     NewToken->TokenInUse = TRUE;
 
-    // TODO: Set a correct SessionId for NewToken
+    /* Set the session ID for the new token */
+    NewToken->SessionId = MmGetSessionId(Process);
 
     /* Unlock the new token */
     SepReleaseTokenLock(NewToken);
@@ -2263,6 +2264,104 @@ SeTokenIsWriteRestricted(IN PACCESS_TOKEN Token)
     // NOTE: NT 5.1 SP2 x86 checks the SE_BACKUP_PRIVILEGES_CHECKED flag
     // while Vista+ checks the TOKEN_WRITE_RESTRICTED flag as one expects.
     return (((PTOKEN)Token)->TokenFlags & SE_BACKUP_PRIVILEGES_CHECKED) != 0;
+}
+
+/**
+ * @brief
+ * Ensures that client impersonation can occur by checking if the token
+ * we're going to assign as the impersonation token can be actually impersonated
+ * in the first place. The routine is used primarily by PsImpersonateClient.
+ *
+ * @param[in] ProcessToken
+ * Token from a process.
+ *
+ * @param[in] TokenToImpersonate
+ * Token that we are going to impersonate.
+ *
+ * @param[in] ImpersonationLevel
+ * Security impersonation level grade.
+ *
+ * @return
+ * Returns TRUE if the conditions checked are met for token impersonation,
+ * FALSE otherwise.
+ */
+BOOLEAN
+NTAPI
+SeTokenCanImpersonate(
+    _In_ PTOKEN ProcessToken,
+    _In_ PTOKEN TokenToImpersonate,
+    _In_ SECURITY_IMPERSONATION_LEVEL ImpersonationLevel)
+{
+    BOOLEAN CanImpersonate;
+    PAGED_CODE();
+
+    /*
+     * SecurityAnonymous and SecurityIdentification levels do not
+     * allow impersonation. If we get such levels from the call
+     * then something's seriously wrong.
+     */
+    ASSERT(ImpersonationLevel != SecurityAnonymous ||
+           ImpersonationLevel != SecurityIdentification);
+
+    /* Time to lock our tokens */
+    SepAcquireTokenLockShared(ProcessToken);
+    SepAcquireTokenLockShared(TokenToImpersonate);
+
+    /* What kind of authentication ID does the token have? */
+    if (RtlEqualLuid(&TokenToImpersonate->AuthenticationId,
+                     &SeAnonymousAuthenticationId))
+    {
+        /*
+         * OK, it looks like the token has an anonymous
+         * authentication. Is that token created by the system?
+         */
+        if (TokenToImpersonate->TokenSource.SourceName != SeSystemTokenSource.SourceName &&
+            !RtlEqualLuid(&TokenToImpersonate->TokenSource.SourceIdentifier, &SeSystemTokenSource.SourceIdentifier))
+        {
+            /* It isn't, we can't impersonate regular tokens */
+            DPRINT("SeTokenCanImpersonate(): Token has an anonymous authentication ID, can't impersonate!\n");
+            CanImpersonate = FALSE;
+            goto Quit;
+        }
+    }
+
+    /* Are the SID values from both tokens equal? */
+    if (!RtlEqualSid(ProcessToken->UserAndGroups->Sid,
+                     TokenToImpersonate->UserAndGroups->Sid))
+    {
+        /* They aren't, bail out */
+        DPRINT("SeTokenCanImpersonate(): Tokens SIDs are not equal!\n");
+        CanImpersonate = FALSE;
+        goto Quit;
+    }
+
+    /*
+     * Make sure the tokens aren't diverged in terms of
+     * restrictions, that is, one token is restricted
+     * but the other one isn't.
+     */
+    if (SeTokenIsRestricted(ProcessToken) !=
+        SeTokenIsRestricted(TokenToImpersonate))
+    {
+        /*
+         * One token is restricted so we cannot
+         * continue further at this point, bail out.
+         */
+        DPRINT("SeTokenCanImpersonate(): One token is restricted, can't continue!\n");
+        CanImpersonate = FALSE;
+        goto Quit;
+    }
+
+    /* If we've reached that far then we can impersonate! */
+    DPRINT("SeTokenCanImpersonate(): We can impersonate.\n");
+    CanImpersonate = TRUE;
+
+Quit:
+    /* We're done, unlock the tokens now */
+    SepReleaseTokenLock(ProcessToken);
+    SepReleaseTokenLock(TokenToImpersonate);
+
+    return CanImpersonate;
 }
 
 /* SYSTEM CALLS ***************************************************************/
