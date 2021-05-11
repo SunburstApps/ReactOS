@@ -267,6 +267,7 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     if (FAILED(hr)) goto out;
 
     hr = IClassFactory_CreateInstance(cf, NULL, iid, ppv);
+    IClassFactory_Release(cf);
 
 out:
     if (appIdKey != NULL) RegCloseKey(appIdKey);
