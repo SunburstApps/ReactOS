@@ -24,7 +24,7 @@ wWinMain(
 {
     HRESULT hr;
 
-    hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr)) return hr;
 
     // TODO: Call CoInitializeSecurity() here
