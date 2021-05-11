@@ -189,6 +189,7 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     PROCESS_INFORMATION pi = {0};
     LRESULT status = 0;
     DWORD size = 0, type = 0;
+    HANDLE waitHandles[2] = {0};
 
     // Don't try to look up a surrogate if one is set for this process, otherwise we'd infinitely recurse.
     if (process_surrogate_instance != NULL) return E_FAIL;
@@ -235,9 +236,14 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
         goto out;
     }
 
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    WaitForSingleObject(hEvent, INFINITE);
+    waitHandles[0] = pi.hProcess;
+    waitHandles[1] = hEvent;
+    if (WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE) == WAIT_OBJECT_0)
+    {
+        // If the process exited before the event was signaled, then the COM surrogate was not registered.
+        hr = E_FAIL;
+        goto out;
+    }
 
     hr = get_surrogate_identifier_moniker(&moniker, pi.dwProcessId);
     if (FAILED(hr)) goto out;
@@ -270,6 +276,8 @@ HRESULT get_surrogate_classobject(REFCLSID clsid, REFIID iid, LPVOID *ppv)
     IClassFactory_Release(cf);
 
 out:
+    if (pi.hProcess != NULL) CloseHandle(pi.hProcess);
+    if (pi.hThread != NULL) CloseHandle(pi.hThread);
     if (appIdKey != NULL) RegCloseKey(appIdKey);
     if (buffer != NULL) free(buffer);
     if (expanded != NULL) free(expanded);
