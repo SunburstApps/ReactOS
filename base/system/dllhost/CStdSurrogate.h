@@ -8,7 +8,6 @@
 #pragma once
 #include "CSurrogateClassFactory.h"
 
-extern HANDLE hStopEvent;
 class CStdSurrogate :
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public ISurrogate {
@@ -39,7 +38,7 @@ public: // *** ISurrogate methods ***
             CoRevokeClassObject(class_factory_tokens[i]);
         }
 
-        SetEvent(hStopEvent);
+        PostQuitMessage(0);
         return S_OK;
     }
 
