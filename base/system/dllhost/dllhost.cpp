@@ -32,10 +32,12 @@ wWinMain(
     CComObject<CStdSurrogate> *surrogate;
     hr = CComObject<CStdSurrogate>::CreateInstance(&surrogate);
     if (FAILED(hr)) return hr;
+    surrogate->AddRef();
 
     ISurrogate *surrogate_iface;
     hr = surrogate->QueryInterface(IID_ISurrogate, (void **)&surrogate_iface);
     if (FAILED(hr)) return hr;
+    surrogate->Release();
 
     hr = CoRegisterSurrogate(surrogate_iface);
     if (FAILED(hr)) return hr;
