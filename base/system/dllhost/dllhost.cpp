@@ -10,7 +10,6 @@
 
 /* FIELDS *******************************************************************/
 
-HANDLE hStopEvent;
 static CComModule app_module;
 
 /* FUNCTIONS ****************************************************************/
@@ -30,7 +29,6 @@ wWinMain(
 
     // TODO: Call CoInitializeSecurity() here
 
-    hStopEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     CComObject<CStdSurrogate> *surrogate;
     hr = CComObject<CStdSurrogate>::CreateInstance(&surrogate);
     if (FAILED(hr)) return hr;
@@ -42,19 +40,14 @@ wWinMain(
     hr = CoRegisterSurrogate(surrogate_iface);
     if (FAILED(hr)) return hr;
 
-    while (true) {
-        DWORD result = WaitForMultipleObjects(1, &hStopEvent, false, 120000);
-        if (result == WAIT_TIMEOUT)
-        {
-            CoFreeUnusedLibrariesEx(INFINITE, 0);
-        }
-        else if (result == WAIT_OBJECT_0)
-        {
-            break;
-        }
+    MSG msg;
+    while (GetMessage(&msg, 0, 0, 0))
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
-    return 0;
+    return (int)msg.wParam;
 }
 
 /* EOF */
