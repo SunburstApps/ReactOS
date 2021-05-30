@@ -916,7 +916,7 @@ MmInitializeProcessAddressSpace(IN PEPROCESS Process,
     PWCHAR Source;
     PCHAR Destination;
     USHORT Length = 0;
-    MMPTE TempPte;
+
 #if (_MI_PAGING_LEVELS >= 3)
     PMMPPE PointerPpe;
 #endif
@@ -993,19 +993,15 @@ MmInitializeProcessAddressSpace(IN PEPROCESS Process,
     PageFrameNumber = PFN_FROM_PTE(PointerPte);
     MiInitializePfn(PageFrameNumber, PointerPte, TRUE);
 
+    /* All our pages are now active & valid. Release the lock. */
+    MiReleasePfnLock(OldIrql);
+
     /* This should be in hyper space, but not in the mapping range */
     Process->Vm.VmWorkingSetList = MmWorkingSetList;
     ASSERT(((ULONG_PTR)MmWorkingSetList >= MI_MAPPING_RANGE_END) && ((ULONG_PTR)MmWorkingSetList <= HYPER_SPACE_END));
 
     /* Now initialize the working set list */
     MiInitializeWorkingSetList(&Process->Vm);
-
-    /* Map the process working set in kernel space */
-    /* FIXME: there should be no need */
-    PointerPte = MiReserveSystemPtes(1, SystemPteSpace);
-    MI_MAKE_HARDWARE_PTE_KERNEL(&TempPte, PointerPte, MM_READWRITE, Process->WorkingSetPage);
-    MI_WRITE_VALID_PTE(PointerPte, TempPte);
-    Process->Vm.VmWorkingSetList = MiPteToAddress(PointerPte);
 
     /* The rule is that the owner process is always in the FLINK of the PDE's PFN entry */
     Pfn = MiGetPfnEntry(Process->Pcb.DirectoryTableBase[0] >> PAGE_SHIFT);
@@ -1015,9 +1011,6 @@ MmInitializeProcessAddressSpace(IN PEPROCESS Process,
 
     /* Sanity check */
     ASSERT(Process->PhysicalVadRoot == NULL);
-
-    /* Release PFN lock */
-    MiReleasePfnLock(OldIrql);
 
     /* Release the process working set */
     MiUnlockProcessWorkingSet(Process, PsGetCurrentThread());
@@ -1361,7 +1354,6 @@ MmDeleteProcessAddressSpace2(IN PEPROCESS Process)
         MiDecrementShareCount(Pfn2, Pfn1->u4.PteFrame);
         MiDecrementShareCount(Pfn1, Process->WorkingSetPage);
         ASSERT((Pfn1->u3.e2.ReferenceCount == 0) || (Pfn1->u3.e1.WriteInProgress));
-        MiReleaseSystemPtes(MiAddressToPte(Process->Vm.VmWorkingSetList), 1, SystemPteSpace);
 
         /* Now map hyperspace and its page table */
         PageFrameIndex = Process->Pcb.DirectoryTableBase[1] >> PAGE_SHIFT;
