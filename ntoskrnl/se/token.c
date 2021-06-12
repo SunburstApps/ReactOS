@@ -32,7 +32,7 @@ static GENERIC_MAPPING SepTokenMapping = {
 static const INFORMATION_CLASS_INFO SeTokenInformationClass[] = {
 
     /* Class 0 not used, blame MS! */
-    IQS_SAME(0, 0, 0),
+    IQS_NONE,
 
     /* TokenUser */
     IQS_SAME(TOKEN_USER, ULONG, ICIF_QUERY | ICIF_QUERY_SIZE_VARIABLE),
@@ -2400,7 +2400,8 @@ NtQueryInformationToken(
                                          TokenInformationLength,
                                          ReturnLength,
                                          NULL,
-                                         PreviousMode);
+                                         PreviousMode,
+                                         TRUE);
     if (!NT_SUCCESS(Status))
     {
         DPRINT("NtQueryInformationToken() failed, Status: 0x%x\n", Status);
