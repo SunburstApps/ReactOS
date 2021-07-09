@@ -37,9 +37,12 @@
 #include "winreg.h"
 #include "wine/list.h"
 #ifdef __REACTOS__
+#include <stdlib.h>
 #include <ndk/umtypes.h>
 #include <ndk/pstypes.h>
 #include "../../../win32ss/include/ntuser.h"
+#include <imm32_undoc.h>
+#include <strsafe.h>
 #endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(imm);
@@ -850,6 +853,9 @@ BOOL WINAPI ImmDestroyContext(HIMC hIMC)
  */
 BOOL WINAPI ImmDisableIME(DWORD idThread)
 {
+#ifdef __REACTOS__
+    return NtUserDisableThreadIme(idThread);
+#else
     if (idThread == (DWORD)-1)
         disable_ime = TRUE;
     else {
@@ -859,6 +865,7 @@ BOOL WINAPI ImmDisableIME(DWORD idThread)
         LeaveCriticalSection(&threaddata_cs);
     }
     return TRUE;
+#endif
 }
 
 /***********************************************************************
@@ -1634,6 +1641,23 @@ DWORD WINAPI ImmGetConversionListW(
 BOOL WINAPI ImmGetConversionStatus(
   HIMC hIMC, LPDWORD lpfdwConversion, LPDWORD lpfdwSentence)
 {
+#ifdef __REACTOS__
+    LPINPUTCONTEXT pIC;
+
+    TRACE("ImmGetConversionStatus(%p %p %p)\n", hIMC, lpfdwConversion, lpfdwSentence);
+
+    pIC = ImmLockIMC(hIMC);
+    if (!pIC)
+        return FALSE;
+
+    if (lpfdwConversion)
+        *lpfdwConversion = pIC->fdwConversion;
+    if (lpfdwSentence)
+        *lpfdwSentence = pIC->fdwSentence;
+
+    ImmUnlockIMC(hIMC);
+    return TRUE;
+#else
     InputContextData *data = get_imc_data(hIMC);
 
     TRACE("%p %p %p\n", hIMC, lpfdwConversion, lpfdwSentence);
@@ -1647,6 +1671,7 @@ BOOL WINAPI ImmGetConversionStatus(
         *lpfdwSentence = data->IMC.fdwSentence;
 
     return TRUE;
+#endif
 }
 
 static BOOL needs_ime_window(HWND hwnd)
@@ -1761,6 +1786,22 @@ HWND WINAPI ImmGetDefaultIMEWnd(HWND hWnd)
 UINT WINAPI ImmGetDescriptionA(
   HKL hKL, LPSTR lpszDescription, UINT uBufLen)
 {
+#ifdef __REACTOS__
+    IMEINFOEX info;
+    size_t cch;
+
+    TRACE("ImmGetDescriptionA(%p,%p,%d)\n", hKL, lpszDescription, uBufLen);
+
+    if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL) || !IS_IME_KBDLAYOUT(hKL))
+        return 0;
+
+    StringCchLengthW(info.wszImeDescription, _countof(info.wszImeDescription), &cch);
+    cch = WideCharToMultiByte(CP_ACP, 0, info.wszImeDescription, (INT)cch,
+                              lpszDescription, uBufLen, NULL, NULL);
+    if (uBufLen)
+        lpszDescription[cch] = 0;
+    return cch;
+#else
   WCHAR *buf;
   DWORD len;
 
@@ -1789,6 +1830,7 @@ UINT WINAPI ImmGetDescriptionA(
     return 0;
 
   return len - 1;
+#endif
 }
 
 /***********************************************************************
@@ -1796,6 +1838,21 @@ UINT WINAPI ImmGetDescriptionA(
  */
 UINT WINAPI ImmGetDescriptionW(HKL hKL, LPWSTR lpszDescription, UINT uBufLen)
 {
+#ifdef __REACTOS__
+    IMEINFOEX info;
+    size_t cch;
+
+    TRACE("ImmGetDescriptionW(%p, %p, %d)\n", hKL, lpszDescription, uBufLen);
+
+    if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL) || !IS_IME_KBDLAYOUT(hKL))
+        return 0;
+
+    if (uBufLen != 0)
+        StringCchCopyW(lpszDescription, uBufLen, info.wszImeDescription);
+
+    StringCchLengthW(info.wszImeDescription, _countof(info.wszImeDescription), &cch);
+    return (UINT)cch;
+#else
   static const WCHAR name[] = { 'W','i','n','e',' ','X','I','M',0 };
 
   FIXME("(%p, %p, %d): semi stub\n", hKL, lpszDescription, uBufLen);
@@ -1804,6 +1861,7 @@ UINT WINAPI ImmGetDescriptionW(HKL hKL, LPWSTR lpszDescription, UINT uBufLen)
   if (!uBufLen) return lstrlenW( name );
   lstrcpynW( lpszDescription, name, uBufLen );
   return lstrlenW( lpszDescription );
+#endif
 }
 
 /***********************************************************************
@@ -1915,6 +1973,24 @@ UINT WINAPI ImmGetIMEFileNameW(HKL hKL, LPWSTR lpszFileName, UINT uBufLen)
  */
 BOOL WINAPI ImmGetOpenStatus(HIMC hIMC)
 {
+#ifdef __REACTOS__
+    BOOL ret;
+    LPINPUTCONTEXT pIC;
+
+    TRACE("ImmGetOpenStatus(%p)\n", hIMC);
+
+    if (!hIMC)
+        return FALSE;
+
+    pIC = ImmLockIMC(hIMC);
+    if (!pIC)
+        return FALSE;
+
+    ret = pIC->fOpen;
+
+    ImmUnlockIMC(hIMC);
+    return ret;
+#else
   InputContextData *data = get_imc_data(hIMC);
   static int i;
 
@@ -1927,6 +2003,7 @@ BOOL WINAPI ImmGetOpenStatus(HIMC hIMC)
       FIXME("(%p): semi-stub\n", hIMC);
 
   return data->IMC.fOpen;
+#endif
 }
 
 /***********************************************************************
@@ -2142,10 +2219,16 @@ HKL WINAPI ImmInstallIMEW(
  */
 BOOL WINAPI ImmIsIME(HKL hKL)
 {
+#ifdef __REACTOS__
+    IMEINFOEX info;
+    TRACE("ImmIsIME(%p)\n", hKL);
+    return !!ImmGetImeInfoEx(&info, ImeInfoExImeWindow, &hKL);
+#else
     ImmHkl *ptr;
     TRACE("(%p):\n", hKL);
     ptr = IMM_GetImmHkl(hKL);
     return (ptr && ptr->hIME);
+#endif
 }
 
 /***********************************************************************
@@ -2955,7 +3038,13 @@ DWORD WINAPI ImmGetIMCLockCount(HIMC hIMC)
 */
 HIMCC  WINAPI ImmCreateIMCC(DWORD size)
 {
+#ifdef __REACTOS__
+    if (size < 4)
+        size = 4;
+    return LocalAlloc(LHND, size);
+#else
     return GlobalAlloc(GMEM_ZEROINIT | GMEM_MOVEABLE, size);
+#endif
 }
 
 /***********************************************************************
@@ -2963,7 +3052,13 @@ HIMCC  WINAPI ImmCreateIMCC(DWORD size)
 */
 HIMCC WINAPI ImmDestroyIMCC(HIMCC block)
 {
+#ifdef __REACTOS__
+    if (block)
+        return LocalFree(block);
+    return NULL;
+#else
     return GlobalFree(block);
+#endif
 }
 
 /***********************************************************************
@@ -2971,7 +3066,13 @@ HIMCC WINAPI ImmDestroyIMCC(HIMCC block)
 */
 LPVOID WINAPI ImmLockIMCC(HIMCC imcc)
 {
+#ifdef __REACTOS__
+    if (imcc)
+        return LocalLock(imcc);
+    return NULL;
+#else
     return GlobalLock(imcc);
+#endif
 }
 
 /***********************************************************************
@@ -2979,7 +3080,13 @@ LPVOID WINAPI ImmLockIMCC(HIMCC imcc)
 */
 BOOL WINAPI ImmUnlockIMCC(HIMCC imcc)
 {
+#ifdef __REACTOS__
+    if (imcc)
+        return LocalUnlock(imcc);
+    return FALSE;
+#else
     return GlobalUnlock(imcc);
+#endif
 }
 
 /***********************************************************************
@@ -2987,7 +3094,11 @@ BOOL WINAPI ImmUnlockIMCC(HIMCC imcc)
 */
 DWORD WINAPI ImmGetIMCCLockCount(HIMCC imcc)
 {
+#ifdef __REACTOS__
+    return LocalFlags(imcc) & LMEM_LOCKCOUNT;
+#else
     return GlobalFlags(imcc) & GMEM_LOCKCOUNT;
+#endif
 }
 
 /***********************************************************************
@@ -2995,7 +3106,13 @@ DWORD WINAPI ImmGetIMCCLockCount(HIMCC imcc)
 */
 HIMCC  WINAPI ImmReSizeIMCC(HIMCC imcc, DWORD size)
 {
+#ifdef __REACTOS__
+    if (!imcc)
+        return NULL;
+    return LocalReAlloc(imcc, size, LHND);
+#else
     return GlobalReAlloc(imcc, size, GMEM_ZEROINIT | GMEM_MOVEABLE);
+#endif
 }
 
 /***********************************************************************
@@ -3003,7 +3120,13 @@ HIMCC  WINAPI ImmReSizeIMCC(HIMCC imcc, DWORD size)
 */
 DWORD WINAPI ImmGetIMCCSize(HIMCC imcc)
 {
+#ifdef __REACTOS__
+    if (imcc)
+        return LocalSize(imcc);
+    return 0;
+#else
     return GlobalSize(imcc);
+#endif
 }
 
 /***********************************************************************
