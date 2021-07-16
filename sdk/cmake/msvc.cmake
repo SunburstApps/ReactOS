@@ -540,11 +540,3 @@ endfunction()
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_RTTI>>,/GR,/GR->>")
 # disable exceptions unless said so
 add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:$<IF:$<BOOL:$<TARGET_PROPERTY:WITH_CXX_EXCEPTIONS>>,/EHsc,/EHs-c->>")
-
-# Create our interface libraries wrapping the needed library for this compiler
-add_library(cppstl INTERFACE)
-target_link_libraries(cppstl INTERFACE cpprt stlport oldnames)
-# We set this properties through our INTERFACE library
-set_target_properties(cppstl PROPERTIES INTERFACE_WITH_CXX_STL TRUE)
-# add_library(cpprt INTERFACE)
-# Our runtime library is already called cpprt

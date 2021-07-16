@@ -531,6 +531,5 @@ target_link_libraries(libstdc++ INTERFACE libsupc++ libmingwex)
 target_compile_definitions(libstdc++ INTERFACE "$<$<COMPILE_LANGUAGE:CXX>:PAL_STDCPP_COMPAT>")
 
 # Create our alias libraries
-add_library(cppstl ALIAS libstdc++)
 add_library(cpprt ALIAS libsupc++)
 
