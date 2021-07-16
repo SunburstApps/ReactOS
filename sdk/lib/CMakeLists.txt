@@ -9,6 +9,7 @@ add_subdirectory(3rdparty)
 add_subdirectory(comsupp)
 add_subdirectory(conutils)
 add_subdirectory(cportlib)
+add_subdirectory(cppstl)
 add_subdirectory(crt)
 add_subdirectory(cryptlib)
 
