@@ -49,7 +49,18 @@ set(SOURCE
 add_library(cppstl STATIC ${SOURCE})
 target_include_directories(cppstl PUBLIC ${REACTOS_SOURCE_DIR}/sdk/include/c++)
 target_include_directories(cppstl PRIVATE include)
-target_compile_definitions(cppstl PRIVATE _LIBCPP_WIN32API=1)
+target_compile_definitions(cppstl PRIVATE
+    _LIBCPP_BUILDING_LIBRARY _LIBCPP_DISABLE_NEW_DELETE_DEFINITIONS
+    _LIBCPP_LINK_PTHREAD_LIB _LIBCPP_LINK_RT_LIB _LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER
+    _LIBCPP_DISABLE_MACRO_CONFLICT_WARNINGS _LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS
+)
+
+# libc++ emits a huge number of warnings, many of which I can do nothing about.
+target_compile_options(cppstl PRIVATE -w)
+
+if(GCC)
+    target_compile_definitions(cppstl PRIVATE __GLIBCXX__)
+endif()
 
 if(MSVC)
     target_link_libraries(cppstl INTERFACE cpprt oldnames)
