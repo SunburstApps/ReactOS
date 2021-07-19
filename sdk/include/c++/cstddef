@@ -44,6 +44,8 @@ Types:
 #include "../crt/stddef.h"
 #include <__nullptr>
 
+typedef double max_align_t;
+
 _LIBCPP_BEGIN_NAMESPACE_STD
 
 using ::ptrdiff_t;
