@@ -55,6 +55,12 @@
 #define _LIBCPP_NO_THREAD_SAFETY_ANALYSIS
 #endif
 
+struct timespec
+{
+  time_t tv_sec;
+  long tv_nsec;
+};
+
 typedef ::timespec __libcpp_timespec_t;
 #endif // !defined(_LIBCPP_HAS_NO_THREADS)
 
