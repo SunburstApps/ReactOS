@@ -120,6 +120,9 @@ _LIBCPP_PUSH_MACROS
 #include <__undef_macros>
 #include <version>
 
+#define __STDC_CONSTANT_MACROS
+#include "../crt/stdint.h"
+#undef __STDC_CONSTANT_MACROS
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
