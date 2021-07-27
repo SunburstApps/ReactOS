@@ -281,6 +281,7 @@ typedef struct _CALLBACKWND
 #define CI_CURTHPRHOOK       0x00000010
 #define CI_CLASSESREGISTERED 0x00000020
 #define CI_IMMACTIVATE       0x00000040
+#define CI_TFSDISABLED       0x00000400
 
 typedef struct _CLIENTINFO
 {
@@ -1210,6 +1211,40 @@ typedef struct _IMEWND
     WND;
     PIMEUI pimeui;
 } IMEWND, *PIMEWND;
+
+typedef BOOL (WINAPI *FN_ImeDestroy)(UINT uReserved);
+typedef BOOL (WINAPI *FN_NotifyIME)(HIMC hIMC, DWORD dwAction, DWORD dwIndex, DWORD dwValue);
+
+typedef struct IMEDPI /* unconfirmed */
+{
+    struct IMEDPI *pNext;
+    HINSTANCE      hInst;
+    HKL            hKL;
+    DWORD          dwUnknown0;
+    DWORD          dwUnknown1;
+    DWORD          dwUnknown2[14];
+    DWORD          cLockObj;
+    DWORD          dwFlags;
+    DWORD          dwUnknown3[7];
+    FN_ImeDestroy  ImeDestroy;
+    DWORD          dwUnknown4[5];
+    FN_NotifyIME   NotifyIME;
+    /* ... */
+} IMEDPI, *PIMEDPI;
+
+#ifndef _WIN64
+C_ASSERT(offsetof(IMEDPI, pNext) == 0x0);
+C_ASSERT(offsetof(IMEDPI, hInst) == 0x4);
+C_ASSERT(offsetof(IMEDPI, hKL) == 0x8);
+C_ASSERT(offsetof(IMEDPI, cLockObj) == 0x4c);
+C_ASSERT(offsetof(IMEDPI, dwFlags) == 0x50);
+C_ASSERT(offsetof(IMEDPI, ImeDestroy) == 0x70);
+C_ASSERT(offsetof(IMEDPI, NotifyIME) == 0x88);
+#endif
+
+/* flags for IMEDPI.dwFlags */
+#define IMEDPI_FLAG_UNKNOWN 1
+#define IMEDPI_FLAG_UNKNOWN2 2
 
 DWORD
 NTAPI
@@ -2675,9 +2710,9 @@ NtUserMoveWindow(
 DWORD
 NTAPI
 NtUserNotifyIMEStatus(
-    DWORD Unknown0,
-    DWORD Unknown1,
-    DWORD Unknown2);
+    HWND hwnd,
+    HIMC hIMC,
+    DWORD dwConversion);
 
 BOOL
 NTAPI
@@ -2786,7 +2821,7 @@ NtUserQueryInformationThread(
 DWORD
 NTAPI
 NtUserQueryInputContext(
-    DWORD dwUnknown1,
+    HIMC hIMC,
     DWORD dwUnknown2);
 
 DWORD
