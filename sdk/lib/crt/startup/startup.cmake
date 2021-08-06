@@ -1,5 +1,6 @@
 
 list(APPEND CRT_STARTUP_SOURCE
+    startup/_matherr.c
     startup/crtexe.c
     startup/wcrtexe.c
     startup/crt_handler.c
@@ -10,9 +11,8 @@ list(APPEND CRT_STARTUP_SOURCE
     startup/mingw_helpers.c
     startup/natstart.c
     startup/charmax.c
-    #startup/merr.c
     startup/atonexit.c
-    #startup/txtmode.c
+    startup/dllmain.c
     startup/pesect.c
     startup/tlsmcrt.c
     startup/tlsthrd.c
@@ -27,3 +27,16 @@ list(APPEND CRT_STARTUP_SOURCE
     startup/dllentry.c
     startup/reactos.c
 )
+
+if(MSVC)
+    list(APPEND CRT_STARTUP_SOURCE
+        startup/mscmain.c
+        startup/threadSafeInit.c
+    )
+else()
+    list(APPEND CRT_STARTUP_SOURCE
+        startup/gccmain.c
+        startup/pseudo-reloc.c
+        startup/pseudo-reloc-list.c
+    )
+endif()

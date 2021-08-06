@@ -48,10 +48,64 @@ WINE_DEFAULT_DEBUG_CHANNEL(imm);
 #define IMM_INIT_MAGIC 0x19650412
 #define IMM_INVALID_CANDFORM ULONG_MAX
 
+#define LANGID_CHINESE_SIMPLIFIED MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED)
+#define LANGID_CHINESE_TRADITIONAL MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL)
+#define LANGID_JAPANESE MAKELANGID(LANG_JAPANESE, SUBLANG_DEFAULT)
+
+#define REGKEY_KEYBOARD_LAYOUTS \
+    L"System\\CurrentControlSet\\Control\\Keyboard Layouts"
+#define REGKEY_IMM \
+    L"Software\\Microsoft\\Windows NT\\CurrentVersion\\IMM"
+
+#define ROUNDUP4(n) (((n) + 3) & ~3)  /* DWORD alignment */
+
+HMODULE g_hImm32Inst = NULL;
 RTL_CRITICAL_SECTION g_csImeDpi;
 PIMEDPI g_pImeDpiList = NULL;
+PSERVERINFO g_psi = NULL;
+SHAREDINFO g_SharedInfo = { NULL };
+BYTE g_bClientRegd = FALSE;
+HANDLE g_hImm32Heap = NULL;
 
-BOOL WINAPI User32InitializeImmEntryTable(DWORD);
+static BOOL APIENTRY Imm32InitInstance(HMODULE hMod)
+{
+    NTSTATUS status;
+
+    if (hMod)
+        g_hImm32Inst = hMod;
+
+    if (g_bClientRegd)
+        return TRUE;
+
+    status = RtlInitializeCriticalSection(&g_csImeDpi);
+    if (NT_ERROR(status))
+        return FALSE;
+
+    g_bClientRegd = TRUE;
+    return TRUE;
+}
+
+LPVOID APIENTRY Imm32HeapAlloc(DWORD dwFlags, DWORD dwBytes)
+{
+    if (!g_hImm32Heap)
+    {
+        g_hImm32Heap = RtlGetProcessHeap();
+        if (g_hImm32Heap == NULL)
+            return NULL;
+    }
+    return HeapAlloc(g_hImm32Heap, dwFlags, dwBytes);
+}
+
+static DWORD_PTR APIENTRY Imm32QueryWindow(HWND hWnd, DWORD Index)
+{
+    return NtUserQueryWindow(hWnd, Index);
+}
+
+static DWORD APIENTRY
+Imm32UpdateInputContext(HIMC hIMC, DWORD Unknown1, PCLIENTIMC pClientImc)
+{
+    return NtUserUpdateInputContext(hIMC, Unknown1, pClientImc);
+}
 
 static DWORD APIENTRY Imm32QueryInputContext(HIMC hIMC, DWORD dwUnknown2)
 {
@@ -61,6 +115,21 @@ static DWORD APIENTRY Imm32QueryInputContext(HIMC hIMC, DWORD dwUnknown2)
 static DWORD APIENTRY Imm32NotifyIMEStatus(HWND hwnd, HIMC hIMC, DWORD dwConversion)
 {
     return NtUserNotifyIMEStatus(hwnd, hIMC, dwConversion);
+}
+
+static HIMC APIENTRY Imm32CreateInputContext(PCLIENTIMC pClientImc)
+{
+    return NtUserCreateInputContext(pClientImc);
+}
+
+static BOOL APIENTRY Imm32DestroyInputContext(HIMC hIMC)
+{
+    return NtUserDestroyInputContext(hIMC);
+}
+
+DWORD_PTR APIENTRY Imm32GetThreadState(DWORD Routine)
+{
+    return NtUserGetThreadState(Routine);
 }
 
 static VOID APIENTRY Imm32FreeImeDpi(PIMEDPI pImeDpi, BOOL bDestroy)
@@ -103,6 +172,321 @@ Imm32NotifyAction(HIMC hIMC, HWND hwnd, DWORD dwAction, DWORD_PTR dwIndex, DWORD
         SendMessageW(hwnd, WM_IME_NOTIFY, dwCommand, dwData);
 
     return TRUE;
+}
+
+static PIMEDPI APIENTRY Imm32FindImeDpi(HKL hKL)
+{
+    PIMEDPI pImeDpi;
+
+    RtlEnterCriticalSection(&g_csImeDpi);
+    for (pImeDpi = g_pImeDpiList; pImeDpi != NULL; pImeDpi = pImeDpi->pNext)
+    {
+        if (pImeDpi->hKL == hKL)
+            break;
+    }
+    RtlLeaveCriticalSection(&g_csImeDpi);
+
+    return pImeDpi;
+}
+
+static BOOL Imm32GetSystemLibraryPath(LPWSTR pszPath, DWORD cchPath, LPCWSTR pszFileName)
+{
+    if (!pszFileName[0] || !GetSystemDirectoryW(pszPath, cchPath))
+        return FALSE;
+    StringCchCatW(pszPath, cchPath, L"\\");
+    StringCchCatW(pszPath, cchPath, pszFileName);
+    return TRUE;
+}
+
+DWORD APIENTRY Imm32SetImeOwnerWindow(PIMEINFOEX pImeInfoEx, BOOL fFlag)
+{
+    return NtUserSetImeOwnerWindow(pImeInfoEx, fFlag);
+}
+
+static BOOL APIENTRY Imm32InquireIme(PIMEDPI pImeDpi)
+{
+    WCHAR szUIClass[64];
+    WNDCLASSW wcW;
+    DWORD dwSysInfoFlags = 0; // TODO: ???
+    LPIMEINFO pImeInfo = &pImeDpi->ImeInfo;
+
+    // TODO: Imm32GetThreadState(THREADSTATE_UNKNOWN16);
+
+    if (!IS_IME_HKL(pImeDpi->hKL))
+    {
+        if (g_psi && (g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED) &&
+            pImeDpi->CtfImeInquireExW)
+        {
+            // TODO:
+            return FALSE;
+        }
+    }
+
+    if (!pImeDpi->ImeInquire(pImeInfo, szUIClass, dwSysInfoFlags))
+        return FALSE;
+
+    szUIClass[_countof(szUIClass) - 1] = 0;
+
+    if (pImeInfo->dwPrivateDataSize == 0)
+        pImeInfo->dwPrivateDataSize = 4;
+
+#define VALID_IME_PROP (IME_PROP_AT_CARET              | \
+                        IME_PROP_SPECIAL_UI            | \
+                        IME_PROP_CANDLIST_START_FROM_1 | \
+                        IME_PROP_UNICODE               | \
+                        IME_PROP_COMPLETE_ON_UNSELECT  | \
+                        IME_PROP_END_UNLOAD            | \
+                        IME_PROP_KBD_CHAR_FIRST        | \
+                        IME_PROP_IGNORE_UPKEYS         | \
+                        IME_PROP_NEED_ALTKEY           | \
+                        IME_PROP_NO_KEYS_ON_CLOSE      | \
+                        IME_PROP_ACCEPT_WIDE_VKEY)
+#define VALID_CMODE_CAPS (IME_CMODE_ALPHANUMERIC | \
+                          IME_CMODE_NATIVE       | \
+                          IME_CMODE_KATAKANA     | \
+                          IME_CMODE_LANGUAGE     | \
+                          IME_CMODE_FULLSHAPE    | \
+                          IME_CMODE_ROMAN        | \
+                          IME_CMODE_CHARCODE     | \
+                          IME_CMODE_HANJACONVERT | \
+                          IME_CMODE_SOFTKBD      | \
+                          IME_CMODE_NOCONVERSION | \
+                          IME_CMODE_EUDC         | \
+                          IME_CMODE_SYMBOL       | \
+                          IME_CMODE_FIXED)
+#define VALID_SMODE_CAPS (IME_SMODE_NONE          | \
+                          IME_SMODE_PLAURALCLAUSE | \
+                          IME_SMODE_SINGLECONVERT | \
+                          IME_SMODE_AUTOMATIC     | \
+                          IME_SMODE_PHRASEPREDICT | \
+                          IME_SMODE_CONVERSATION)
+#define VALID_UI_CAPS (UI_CAP_2700    | \
+                       UI_CAP_ROT90   | \
+                       UI_CAP_ROTANY  | \
+                       UI_CAP_SOFTKBD)
+#define VALID_SCS_CAPS (SCS_CAP_COMPSTR            | \
+                        SCS_CAP_MAKEREAD           | \
+                        SCS_CAP_SETRECONVERTSTRING)
+#define VALID_SELECT_CAPS (SELECT_CAP_CONVERSION | SELECT_CAP_SENTENCE)
+
+    if (pImeInfo->fdwProperty & ~VALID_IME_PROP)
+        return FALSE;
+    if (pImeInfo->fdwConversionCaps & ~VALID_CMODE_CAPS)
+        return FALSE;
+    if (pImeInfo->fdwSentenceCaps & ~VALID_SMODE_CAPS)
+        return FALSE;
+    if (pImeInfo->fdwUICaps & ~VALID_UI_CAPS)
+        return FALSE;
+    if (pImeInfo->fdwSCSCaps & ~VALID_SCS_CAPS)
+        return FALSE;
+    if (pImeInfo->fdwSelectCaps & ~VALID_SELECT_CAPS)
+        return FALSE;
+
+#undef VALID_IME_PROP
+#undef VALID_CMODE_CAPS
+#undef VALID_SMODE_CAPS
+#undef VALID_UI_CAPS
+#undef VALID_SCS_CAPS
+#undef VALID_SELECT_CAPS
+
+    if (pImeInfo->fdwProperty & IME_PROP_UNICODE)
+    {
+        StringCchCopyW(pImeDpi->szUIClass, _countof(pImeDpi->szUIClass), szUIClass);
+    }
+    else
+    {
+        if (pImeDpi->uCodePage != GetACP() && pImeDpi->uCodePage)
+            return FALSE;
+
+        MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, (LPSTR)szUIClass, -1,
+                            pImeDpi->szUIClass, _countof(pImeDpi->szUIClass));
+    }
+
+    return GetClassInfoW(pImeDpi->hInst, pImeDpi->szUIClass, &wcW);
+}
+
+static BOOL APIENTRY Imm32LoadImeInfo(PIMEINFOEX pImeInfoEx, PIMEDPI pImeDpi)
+{
+    WCHAR szPath[MAX_PATH];
+    HINSTANCE hIME;
+    FARPROC fn;
+
+    if (!Imm32GetSystemLibraryPath(szPath, _countof(szPath), pImeInfoEx->wszImeFile))
+        return FALSE;
+
+    hIME = GetModuleHandleW(szPath);
+    if (hIME == NULL)
+    {
+        hIME = LoadLibraryW(szPath);
+        if (hIME == NULL)
+        {
+            ERR("Imm32LoadImeInfo: LoadLibraryW(%S) failed\n", szPath);
+            return FALSE;
+        }
+    }
+    pImeDpi->hInst = hIME;
+
+#define DEFINE_IME_ENTRY(type, name, params, extended) \
+    do { \
+        fn = GetProcAddress(hIME, #name); \
+        if (fn) pImeDpi->name = (FN_##name)fn; \
+        else if (!extended) goto Failed; \
+    } while (0);
+#include "../../../win32ss/include/imetable.h"
+#undef DEFINE_IME_ENTRY
+
+    if (!Imm32InquireIme(pImeDpi))
+    {
+        ERR("Imm32LoadImeInfo: Imm32InquireIme failed\n");
+        goto Failed;
+    }
+
+    if (pImeInfoEx->fLoadFlag)
+        return TRUE;
+
+    Imm32SetImeOwnerWindow(pImeInfoEx, TRUE);
+    return TRUE;
+
+Failed:
+    FreeLibrary(pImeDpi->hInst);
+    pImeDpi->hInst = NULL;
+    return FALSE;
+}
+
+static PIMEDPI APIENTRY Ime32LoadImeDpi(HKL hKL, BOOL bLock)
+{
+    IMEINFOEX ImeInfoEx;
+    CHARSETINFO ci;
+    PIMEDPI pImeDpiNew, pImeDpiFound;
+    UINT uCodePage;
+    LCID lcid;
+
+    if (!ImmGetImeInfoEx(&ImeInfoEx, ImeInfoExKeyboardLayout, &hKL) ||
+        ImeInfoEx.fLoadFlag == 1)
+    {
+        return NULL;
+    }
+
+    pImeDpiNew = Imm32HeapAlloc(HEAP_ZERO_MEMORY, sizeof(IMEDPI));
+    if (pImeDpiNew == NULL)
+        return NULL;
+
+    pImeDpiNew->hKL = hKL;
+
+    lcid = LOWORD(hKL);
+    if (TranslateCharsetInfo((LPDWORD)(DWORD_PTR)lcid, &ci, TCI_SRCLOCALE))
+        uCodePage = ci.ciACP;
+    else
+        uCodePage = CP_ACP;
+    pImeDpiNew->uCodePage = uCodePage;
+
+    if (!Imm32LoadImeInfo(&ImeInfoEx, pImeDpiNew))
+    {
+        HeapFree(g_hImm32Heap, 0, pImeDpiNew);
+        return FALSE;
+    }
+
+    RtlEnterCriticalSection(&g_csImeDpi);
+
+    pImeDpiFound = Imm32FindImeDpi(hKL);
+    if (pImeDpiFound)
+    {
+        if (!bLock)
+            pImeDpiFound->dwFlags &= ~IMEDPI_FLAG_LOCKED;
+
+        RtlLeaveCriticalSection(&g_csImeDpi);
+
+        Imm32FreeImeDpi(pImeDpiNew, FALSE);
+        HeapFree(g_hImm32Heap, 0, pImeDpiNew);
+        return pImeDpiFound;
+    }
+    else
+    {
+        if (bLock)
+        {
+            pImeDpiNew->dwFlags |= IMEDPI_FLAG_LOCKED;
+            pImeDpiNew->cLockObj = 1;
+        }
+
+        pImeDpiNew->pNext = g_pImeDpiList;
+        g_pImeDpiList = pImeDpiNew;
+
+        RtlLeaveCriticalSection(&g_csImeDpi);
+        return pImeDpiNew;
+    }
+}
+
+BOOL WINAPI ImmLoadIME(HKL hKL)
+{
+    PW32CLIENTINFO pInfo;
+    PIMEDPI pImeDpi;
+
+    if (!IS_IME_HKL(hKL))
+    {
+        if (!g_psi || !(g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED))
+            return FALSE;
+
+        pInfo = (PW32CLIENTINFO)(NtCurrentTeb()->Win32ClientInfo);
+        if ((pInfo->W32ClientInfo[0] & 2))
+            return FALSE;
+    }
+
+    pImeDpi = Imm32FindImeDpi(hKL);
+    if (pImeDpi == NULL)
+        pImeDpi = Ime32LoadImeDpi(hKL, FALSE);
+    return (pImeDpi != NULL);
+}
+
+HKL WINAPI ImmLoadLayout(HKL hKL, PIMEINFOEX pImeInfoEx)
+{
+    DWORD cbData;
+    UNICODE_STRING UnicodeString;
+    HKEY hLayoutKey = NULL, hLayoutsKey = NULL;
+    LONG error;
+    NTSTATUS Status;
+    WCHAR szLayout[MAX_PATH];
+
+    TRACE("(%p, %p)\n", hKL, pImeInfoEx);
+
+    if (IS_IME_HKL(hKL) ||
+        !g_psi || !(g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED) ||
+        ((PW32CLIENTINFO)NtCurrentTeb()->Win32ClientInfo)->W32ClientInfo[0] & 2)
+    {
+        UnicodeString.Buffer = szLayout;
+        UnicodeString.MaximumLength = sizeof(szLayout);
+        Status = RtlIntegerToUnicodeString((DWORD_PTR)hKL, 16, &UnicodeString);
+        if (!NT_SUCCESS(Status))
+            return NULL;
+
+        error = RegOpenKeyW(HKEY_LOCAL_MACHINE, REGKEY_KEYBOARD_LAYOUTS, &hLayoutsKey);
+        if (error)
+            return NULL;
+
+        error = RegOpenKeyW(hLayoutsKey, szLayout, &hLayoutKey);
+    }
+    else
+    {
+        error = RegOpenKeyW(HKEY_LOCAL_MACHINE, REGKEY_IMM, &hLayoutKey);
+    }
+
+    if (error)
+    {
+        ERR("RegOpenKeyW error: 0x%08lX\n", error);
+        hKL = NULL;
+    }
+    else
+    {
+        cbData = sizeof(pImeInfoEx->wszImeFile);
+        error = RegQueryValueExW(hLayoutKey, L"Ime File", 0, 0,
+                                 (LPBYTE)pImeInfoEx->wszImeFile, &cbData);
+        if (error)
+            hKL = NULL;
+    }
+
+    RegCloseKey(hLayoutKey);
+    if (hLayoutsKey)
+        RegCloseKey(hLayoutsKey);
+    return hKL;
 }
 
 typedef struct _tagImmHkl{
@@ -194,7 +578,6 @@ static inline BOOL is_kbd_ime_unicode(const ImmHkl *hkl)
     return !!(hkl->imeInfo.fdwProperty & IME_PROP_UNICODE);
 }
 
-static BOOL IMM_DestroyContext(HIMC hIMC);
 static InputContextData* get_imc_data(HIMC hIMC);
 
 static inline WCHAR *strdupAtoW( const char *str )
@@ -331,36 +714,6 @@ static IMMThreadData *IMM_GetThreadData(HWND hwnd, DWORD thread)
     return data;
 }
 
-static BOOL IMM_IsDefaultContext(HIMC imc)
-{
-    InputContextData *data = get_imc_data(imc);
-
-    if (!data)
-        return FALSE;
-
-    return data->threadDefault;
-}
-
-static void IMM_FreeThreadData(void)
-{
-    IMMThreadData *data;
-
-    EnterCriticalSection(&threaddata_cs);
-    LIST_FOR_EACH_ENTRY(data, &ImmThreadDataList, IMMThreadData, entry)
-    {
-        if (data->threadID == GetCurrentThreadId())
-        {
-            list_remove(&data->entry);
-            LeaveCriticalSection(&threaddata_cs);
-            IMM_DestroyContext(data->defaultContext);
-            HeapFree(GetProcessHeap(),0,data);
-            TRACE("Thread Data Destroyed\n");
-            return;
-        }
-    }
-    LeaveCriticalSection(&threaddata_cs);
-}
-
 static HMODULE load_graphics_driver(void)
 {
     static const WCHAR display_device_guid_propW[] = {
@@ -469,49 +822,6 @@ HWND WINAPI __wine_get_ui_window(HKL hkl)
     return immHkl->UIWnd;
 }
 
-static void IMM_FreeAllImmHkl(void)
-{
-    ImmHkl *ptr,*cursor2;
-
-    LIST_FOR_EACH_ENTRY_SAFE(ptr, cursor2, &ImmHklList, ImmHkl, entry)
-    {
-        list_remove(&ptr->entry);
-        if (ptr->hIME)
-        {
-            ptr->pImeDestroy(1);
-            FreeLibrary(ptr->hIME);
-        }
-        if (ptr->UIWnd)
-            DestroyWindow(ptr->UIWnd);
-        HeapFree(GetProcessHeap(),0,ptr);
-    }
-}
-
-BOOL WINAPI DllMain(HINSTANCE hInstDLL, DWORD fdwReason, LPVOID lpReserved)
-{
-    TRACE("%p, %x, %p\n",hInstDLL,fdwReason,lpReserved);
-    switch (fdwReason)
-    {
-        case DLL_PROCESS_ATTACH:
-            if (!User32InitializeImmEntryTable(IMM_INIT_MAGIC))
-            {
-                return FALSE;
-            }
-            break;
-        case DLL_THREAD_ATTACH:
-            break;
-        case DLL_THREAD_DETACH:
-            IMM_FreeThreadData();
-            break;
-        case DLL_PROCESS_DETACH:
-            if (lpReserved) break;
-            IMM_FreeThreadData();
-            IMM_FreeAllImmHkl();
-            break;
-    }
-    return TRUE;
-}
-
 /* for posting messages as the IME */
 static void ImmInternalPostIMEMessage(InputContextData *data, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -545,18 +855,6 @@ static LRESULT ImmInternalSendIMENotify(InputContextData *data, WPARAM notify, L
     return 0;
 }
 
-static HIMCC ImmCreateBlankCompStr(void)
-{
-    HIMCC rc;
-    LPCOMPOSITIONSTRING ptr;
-    rc = ImmCreateIMCC(sizeof(COMPOSITIONSTRING));
-    ptr = ImmLockIMCC(rc);
-    memset(ptr,0,sizeof(COMPOSITIONSTRING));
-    ptr->dwSize = sizeof(COMPOSITIONSTRING);
-    ImmUnlockIMCC(rc);
-    return rc;
-}
-
 static InputContextData* get_imc_data(HIMC hIMC)
 {
     InputContextData *data = hIMC;
@@ -574,43 +872,8 @@ static InputContextData* get_imc_data(HIMC hIMC)
 
 static HIMC get_default_context( HWND hwnd )
 {
-    HIMC ret;
-    IMMThreadData* thread_data = IMM_GetThreadData( hwnd, 0 );
-
-    if (!thread_data) return 0;
-
-    if (thread_data->defaultContext)
-    {
-        ret = thread_data->defaultContext;
-        LeaveCriticalSection(&threaddata_cs);
-        return ret;
-    }
-
-    /* can't create a default context in another thread */
-    if (thread_data->threadID != GetCurrentThreadId())
-    {
-        LeaveCriticalSection(&threaddata_cs);
-        return 0;
-    }
-
-    LeaveCriticalSection(&threaddata_cs);
-
-    ret = ImmCreateContext();
-    if (!ret) return 0;
-    ((InputContextData*)ret)->threadDefault = TRUE;
-
-    /* thread_data is in the current thread so we can assume it's still valid */
-    EnterCriticalSection(&threaddata_cs);
-
-    if (thread_data->defaultContext) /* someone beat us */
-    {
-        IMM_DestroyContext( ret );
-        ret = thread_data->defaultContext;
-    }
-    else thread_data->defaultContext = ret;
-
-    LeaveCriticalSection(&threaddata_cs);
-    return ret;
+    FIXME("Don't use this function\n");
+    return FALSE;
 }
 
 static BOOL IMM_IsCrossThreadAccess(HWND hWnd,  HIMC hIMC)
@@ -811,83 +1074,106 @@ BOOL WINAPI ImmConfigureIMEW(
  */
 HIMC WINAPI ImmCreateContext(void)
 {
-    InputContextData *new_context;
-    LPGUIDELINE gl;
-    LPCANDIDATEINFO ci;
-    int i;
+    PCLIENTIMC pClientImc;
+    HIMC hIMC;
 
-    new_context = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(InputContextData));
+    TRACE("()\n");
 
-    /* Load the IME */
-    new_context->immKbd = IMM_GetImmHkl(GetKeyboardLayout(0));
+    if (g_psi == NULL || !(g_psi->dwSRVIFlags & SRVINFO_IMM32))
+        return NULL;
 
-    if (!new_context->immKbd->hIME)
+    pClientImc = Imm32HeapAlloc(HEAP_ZERO_MEMORY, sizeof(CLIENTIMC));
+    if (pClientImc == NULL)
+        return NULL;
+
+    hIMC = Imm32CreateInputContext(pClientImc);
+    if (hIMC == NULL)
     {
-        TRACE("IME dll could not be loaded\n");
-        HeapFree(GetProcessHeap(),0,new_context);
-        return 0;
+        HeapFree(g_hImm32Heap, 0, pClientImc);
+        return NULL;
     }
 
-    /* the HIMCCs are never NULL */
-    new_context->IMC.hCompStr = ImmCreateBlankCompStr();
-    new_context->IMC.hMsgBuf = ImmCreateIMCC(0);
-    new_context->IMC.hCandInfo = ImmCreateIMCC(sizeof(CANDIDATEINFO));
-    ci = ImmLockIMCC(new_context->IMC.hCandInfo);
-    memset(ci,0,sizeof(CANDIDATEINFO));
-    ci->dwSize = sizeof(CANDIDATEINFO);
-    ImmUnlockIMCC(new_context->IMC.hCandInfo);
-    new_context->IMC.hGuideLine = ImmCreateIMCC(sizeof(GUIDELINE));
-    gl = ImmLockIMCC(new_context->IMC.hGuideLine);
-    memset(gl,0,sizeof(GUIDELINE));
-    gl->dwSize = sizeof(GUIDELINE);
-    ImmUnlockIMCC(new_context->IMC.hGuideLine);
-
-    for (i = 0; i < ARRAY_SIZE(new_context->IMC.cfCandForm); i++)
-        new_context->IMC.cfCandForm[i].dwIndex = ~0u;
-
-    /* Initialize the IME Private */
-    new_context->IMC.hPrivate = ImmCreateIMCC(new_context->immKbd->imeInfo.dwPrivateDataSize);
-
-    new_context->IMC.fdwConversion = new_context->immKbd->imeInfo.fdwConversionCaps;
-    new_context->IMC.fdwSentence = new_context->immKbd->imeInfo.fdwSentenceCaps;
-
-    if (!new_context->immKbd->pImeSelect(new_context, TRUE))
-    {
-        TRACE("Selection of IME failed\n");
-        IMM_DestroyContext(new_context);
-        return 0;
-    }
-    new_context->threadID = GetCurrentThreadId();
-    SendMessageW(GetFocus(), WM_IME_SELECT, TRUE, (LPARAM)new_context->immKbd);
-
-    new_context->immKbd->uSelected++;
-    TRACE("Created context %p\n",new_context);
-
-    new_context->magic = WINE_IMC_VALID_MAGIC;
-    return new_context;
+    RtlInitializeCriticalSection(&pClientImc->cs);
+    pClientImc->unknown = Imm32GetThreadState(THREADSTATE_UNKNOWN13);
+    return hIMC;
 }
 
-static BOOL IMM_DestroyContext(HIMC hIMC)
+static VOID APIENTRY Imm32CleanupContextExtra(LPINPUTCONTEXT pIC)
 {
-    InputContextData *data = get_imc_data(hIMC);
+    FIXME("We have to do something do here");
+}
 
-    TRACE("Destroying %p\n",hIMC);
+static PCLIENTIMC APIENTRY Imm32FindClientImc(HIMC hIMC)
+{
+    // FIXME
+    return NULL;
+}
 
-    if (!data)
+BOOL APIENTRY Imm32CleanupContext(HIMC hIMC, HKL hKL, BOOL bKeep)
+{
+    PIMEDPI pImeDpi;
+    LPINPUTCONTEXT pIC;
+    PCLIENTIMC pClientImc;
+
+    if (g_psi == NULL || !(g_psi->dwSRVIFlags & SRVINFO_IMM32) || hIMC == NULL)
         return FALSE;
 
-    data->immKbd->uSelected --;
-    data->immKbd->pImeSelect(hIMC, FALSE);
-    SendMessageW(data->IMC.hWnd, WM_IME_SELECT, FALSE, (LPARAM)data->immKbd);
+    FIXME("We have do something to do here\n");
+    pClientImc = Imm32FindClientImc(hIMC);
+    if (!pClientImc)
+        return FALSE;
 
-    ImmDestroyIMCC(data->IMC.hCompStr);
-    ImmDestroyIMCC(data->IMC.hCandInfo);
-    ImmDestroyIMCC(data->IMC.hGuideLine);
-    ImmDestroyIMCC(data->IMC.hPrivate);
-    ImmDestroyIMCC(data->IMC.hMsgBuf);
+    if (pClientImc->hImc == NULL)
+    {
+        pClientImc->dwFlags |= CLIENTIMC_UNKNOWN1;
+        ImmUnlockClientImc(pClientImc);
+        if (!bKeep)
+            return Imm32DestroyInputContext(hIMC);
+        return TRUE;
+    }
 
-    data->magic = 0;
-    HeapFree(GetProcessHeap(),0,data);
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+    {
+        ImmUnlockClientImc(pClientImc);
+        return FALSE;
+    }
+
+    FIXME("We have do something to do here\n");
+
+    if (pClientImc->hKL == hKL)
+    {
+        pImeDpi = ImmLockImeDpi(hKL);
+        if (pImeDpi != NULL)
+        {
+            if (IS_IME_HKL(hKL))
+            {
+                pImeDpi->ImeSelect(hIMC, FALSE);
+            }
+            else if (g_psi && (g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED))
+            {
+                FIXME("We have do something to do here\n");
+            }
+            ImmUnlockImeDpi(pImeDpi);
+        }
+        pClientImc->hKL = NULL;
+    }
+
+    ImmDestroyIMCC(pIC->hPrivate);
+    ImmDestroyIMCC(pIC->hMsgBuf);
+    ImmDestroyIMCC(pIC->hGuideLine);
+    ImmDestroyIMCC(pIC->hCandInfo);
+    ImmDestroyIMCC(pIC->hCompStr);
+
+    Imm32CleanupContextExtra(pIC);
+
+    ImmUnlockIMC(hIMC);
+
+    pClientImc->dwFlags |= CLIENTIMC_UNKNOWN1;
+    ImmUnlockClientImc(pClientImc);
+
+    if (!bKeep)
+        return Imm32DestroyInputContext(hIMC);
 
     return TRUE;
 }
@@ -897,18 +1183,29 @@ static BOOL IMM_DestroyContext(HIMC hIMC)
  */
 BOOL WINAPI ImmDestroyContext(HIMC hIMC)
 {
-    if (!IMM_IsDefaultContext(hIMC) && !IMM_IsCrossThreadAccess(NULL, hIMC))
-        return IMM_DestroyContext(hIMC);
-    else
+    DWORD dwImeThreadId, dwThreadId;
+    HKL hKL;
+
+    TRACE("(%p)\n", hIMC);
+
+    if (g_psi == NULL || !(g_psi->dwSRVIFlags & SRVINFO_IMM32))
         return FALSE;
+
+    dwImeThreadId = Imm32QueryInputContext(hIMC, 1);
+    dwThreadId = GetCurrentThreadId();
+    if (dwImeThreadId != dwThreadId)
+        return FALSE;
+
+    hKL = GetKeyboardLayout(0);
+    return Imm32CleanupContext(hIMC, hKL, FALSE);
 }
 
 /***********************************************************************
  *		ImmDisableIME (IMM32.@)
  */
-BOOL WINAPI ImmDisableIME(DWORD idThread)
+BOOL WINAPI ImmDisableIME(DWORD dwThreadId)
 {
-    return NtUserDisableThreadIme(idThread);
+    return NtUserDisableThreadIme(dwThreadId);
 }
 
 /***********************************************************************
@@ -1060,54 +1357,289 @@ LRESULT WINAPI ImmEscapeW(
         return 0;
 }
 
-#define ROUNDUP4(n) (((n) + 3) & ~3)  /* DWORD alignment */
-
-HANDLE g_hImm32Heap = NULL;
-DWORD g_dwImm32Flags = 0;
-
-/* flags for g_dwImm32Flags */
-#define IMM32_FLAG_UNKNOWN 0x4
-#define IMM32_FLAG_CICERO_ENABLED 0x20
-
-LPVOID APIENTRY Imm32HeapAlloc(DWORD dwFlags, DWORD dwBytes)
-{
-    if (!g_hImm32Heap)
-    {
-        g_hImm32Heap = RtlGetProcessHeap();
-        if (g_hImm32Heap == NULL)
-            return NULL;
-    }
-    return HeapAlloc(g_hImm32Heap, dwFlags, dwBytes);
-}
-
-static DWORD_PTR APIENTRY
-Imm32GetThreadState(DWORD Routine)
-{
-    return NtUserGetThreadState(Routine);
-}
-
-static DWORD_PTR APIENTRY Imm32QueryWindow(HWND hWnd, DWORD Index)
-{
-    return NtUserQueryWindow(hWnd, Index);
-}
-
-static DWORD APIENTRY
-Imm32UpdateInputContext(HIMC hIMC, DWORD Unknown1, PCLIENTIMC pClientImc)
-{
-    return NtUserUpdateInputContext(hIMC, Unknown1, pClientImc);
-}
-
 static PCLIENTIMC APIENTRY Imm32GetClientImcCache(void)
 {
     // FIXME: Do something properly here
     return NULL;
 }
 
+static NTSTATUS APIENTRY
+Imm32BuildHimcList(DWORD dwThreadId, DWORD dwCount, HIMC *phList, LPDWORD pdwCount)
+{
+    return NtUserBuildHimcList(dwThreadId, dwCount, phList, pdwCount);
+}
+
+static DWORD APIENTRY Imm32AllocAndBuildHimcList(DWORD dwThreadId, HIMC **pphList)
+{
+#define INITIAL_COUNT 0x40
+#define MAX_RETRY 10
+    NTSTATUS Status;
+    DWORD dwCount = INITIAL_COUNT, cRetry = 0;
+    HIMC *phNewList;
+
+    phNewList = Imm32HeapAlloc(0, dwCount * sizeof(HIMC));
+    if (phNewList == NULL)
+        return 0;
+
+    Status = Imm32BuildHimcList(dwThreadId, dwCount, phNewList, &dwCount);
+    while (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        HeapFree(g_hImm32Heap, 0, phNewList);
+        if (cRetry++ >= MAX_RETRY)
+            return 0;
+
+        phNewList = Imm32HeapAlloc(0, dwCount * sizeof(HIMC));
+        if (phNewList == NULL)
+            return 0;
+
+        Status = Imm32BuildHimcList(dwThreadId, dwCount, phNewList, &dwCount);
+    }
+
+    if (NT_ERROR(Status) || !dwCount)
+    {
+        HeapFree(g_hImm32Heap, 0, phNewList);
+        return 0;
+    }
+
+    *pphList = phNewList;
+    return dwCount;
+#undef INITIAL_COUNT
+#undef MAX_RETRY
+}
+
+static BOOL APIENTRY Imm32ImeNonImeToggle(HIMC hIMC, HKL hKL, HWND hWnd, LANGID LangID)
+{
+    LPINPUTCONTEXT pIC;
+    BOOL fOpen;
+
+    if (hWnd != NULL)
+        return FALSE;
+
+    if (!IS_IME_HKL(hKL) || LOWORD(hKL) != LangID)
+    {
+        FIXME("We have to do something here\n");
+        return TRUE;
+    }
+
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return TRUE;
+
+    fOpen = pIC->fOpen;
+    ImmUnlockIMC(hIMC);
+
+    if (!fOpen)
+    {
+        ImmSetOpenStatus(hIMC, TRUE);
+        return TRUE;
+    }
+
+    FIXME("We have to do something here\n");
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32CShapeToggle(HIMC hIMC, HKL hKL, HWND hWnd)
+{
+    LPINPUTCONTEXT pIC;
+    BOOL fOpen;
+    DWORD dwConversion, dwSentence;
+
+    if (hWnd == NULL || !IS_IME_HKL(hKL))
+        return FALSE;
+
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return TRUE;
+
+    fOpen = pIC->fOpen;
+    if (fOpen)
+    {
+        dwConversion = (pIC->fdwConversion ^ IME_CMODE_FULLSHAPE);
+        dwSentence = pIC->fdwSentence;
+    }
+
+    ImmUnlockIMC(hIMC);
+
+    if (fOpen)
+        ImmSetConversionStatus(hIMC, dwConversion, dwSentence);
+    else
+        ImmSetOpenStatus(hIMC, TRUE);
+
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32CSymbolToggle(HIMC hIMC, HKL hKL, HWND hWnd)
+{
+    LPINPUTCONTEXT pIC;
+    BOOL fOpen;
+    DWORD dwConversion, dwSentence;
+
+    if (hWnd == NULL || !IS_IME_HKL(hKL))
+        return FALSE;
+
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return TRUE;
+
+    fOpen = pIC->fOpen;
+    if (fOpen)
+    {
+        dwConversion = (pIC->fdwConversion ^ IME_CMODE_SYMBOL);
+        dwSentence = pIC->fdwSentence;
+    }
+
+    ImmUnlockIMC(hIMC);
+
+    if (fOpen)
+        ImmSetConversionStatus(hIMC, dwConversion, dwSentence);
+    else
+        ImmSetOpenStatus(hIMC, TRUE);
+
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32JCloseOpen(HIMC hIMC, HKL hKL, HWND hWnd)
+{
+    BOOL fOpen;
+
+    if (ImmIsIME(hKL) && LOWORD(hKL) == LANGID_JAPANESE)
+    {
+        fOpen = ImmGetOpenStatus(hIMC);
+        ImmSetOpenStatus(hIMC, !fOpen);
+        return TRUE;
+    }
+
+    FIXME("We have to do something here\n");
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32KShapeToggle(HIMC hIMC)
+{
+    LPINPUTCONTEXT pIC;
+    DWORD dwConversion, dwSentence;
+
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return FALSE;
+
+    dwConversion = (pIC->fdwConversion ^ IME_CMODE_FULLSHAPE);
+    dwSentence = pIC->fdwSentence;
+    ImmSetConversionStatus(hIMC, dwConversion, dwSentence);
+
+    if (pIC->fdwConversion & (IME_CMODE_FULLSHAPE | IME_CMODE_NATIVE))
+        ImmSetOpenStatus(hIMC, TRUE);
+    else
+        ImmSetOpenStatus(hIMC, FALSE);
+
+    ImmUnlockIMC(hIMC);
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32KHanjaConvert(HIMC hIMC)
+{
+    LPINPUTCONTEXT pIC;
+    DWORD dwConversion, dwSentence;
+
+    pIC = ImmLockIMC(hIMC);
+    if (!pIC)
+        return FALSE;
+
+    dwConversion = (pIC->fdwConversion ^ IME_CMODE_HANJACONVERT);
+    dwSentence = pIC->fdwSentence;
+    ImmUnlockIMC(hIMC);
+
+    ImmSetConversionStatus(hIMC, dwConversion, dwSentence);
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32KEnglish(HIMC hIMC)
+{
+    LPINPUTCONTEXT pIC;
+    DWORD dwConversion, dwSentence;
+    BOOL fOpen;
+
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return FALSE;
+
+    dwConversion = (pIC->fdwConversion ^ IME_CMODE_NATIVE);
+    dwSentence = pIC->fdwSentence;
+    ImmSetConversionStatus(hIMC, dwConversion, dwSentence);
+
+    fOpen = ((pIC->fdwConversion & (IME_CMODE_FULLSHAPE | IME_CMODE_NATIVE)) != 0);
+    ImmSetOpenStatus(hIMC, fOpen);
+
+    ImmUnlockIMC(hIMC);
+    return TRUE;
+}
+
+static BOOL APIENTRY Imm32ProcessHotKey(HWND hWnd, HIMC hIMC, HKL hKL, DWORD dwHotKeyID)
+{
+    DWORD dwImeThreadId, dwThreadId;
+    PIMEDPI pImeDpi;
+    BOOL ret;
+
+    if (hIMC)
+    {
+        dwImeThreadId = Imm32QueryInputContext(hIMC, 1);
+        dwThreadId = GetCurrentThreadId();
+        if (dwImeThreadId != dwThreadId)
+            return FALSE;
+    }
+
+    switch (dwHotKeyID)
+    {
+        case IME_CHOTKEY_IME_NONIME_TOGGLE:
+            return Imm32ImeNonImeToggle(hIMC, hKL, hWnd, LANGID_CHINESE_SIMPLIFIED);
+
+        case IME_CHOTKEY_SHAPE_TOGGLE:
+            return Imm32CShapeToggle(hIMC, hKL, hWnd);
+
+        case IME_CHOTKEY_SYMBOL_TOGGLE:
+            return Imm32CSymbolToggle(hIMC, hKL, hWnd);
+
+        case IME_JHOTKEY_CLOSE_OPEN:
+            return Imm32JCloseOpen(hIMC, hKL, hWnd);
+
+        case IME_KHOTKEY_SHAPE_TOGGLE:
+            return Imm32KShapeToggle(hIMC);
+
+        case IME_KHOTKEY_HANJACONVERT:
+            return Imm32KHanjaConvert(hIMC);
+
+        case IME_KHOTKEY_ENGLISH:
+            return Imm32KEnglish(hIMC);
+
+        case IME_THOTKEY_IME_NONIME_TOGGLE:
+            return Imm32ImeNonImeToggle(hIMC, hKL, hWnd, LANGID_CHINESE_TRADITIONAL);
+
+        case IME_THOTKEY_SHAPE_TOGGLE:
+            return Imm32CShapeToggle(hIMC, hKL, hWnd);
+
+        case IME_THOTKEY_SYMBOL_TOGGLE:
+            return Imm32CSymbolToggle(hIMC, hKL, hWnd);
+
+        default:
+            break;
+    }
+
+    if (dwHotKeyID < IME_HOTKEY_PRIVATE_FIRST || IME_HOTKEY_PRIVATE_LAST < dwHotKeyID)
+        return FALSE;
+
+    pImeDpi = ImmLockImeDpi(hKL);
+    if (pImeDpi == NULL)
+        return FALSE;
+
+    ret = (BOOL)pImeDpi->ImeEscape(hIMC, IME_ESC_PRIVATE_HOTKEY, &dwHotKeyID);
+    ImmUnlockImeDpi(pImeDpi);
+    return ret;
+}
+
 PCLIENTIMC WINAPI ImmLockClientImc(HIMC hImc)
 {
     PCLIENTIMC pClientImc;
 
-    TRACE("ImmLockClientImc(%p)\n", hImc);
+    TRACE("(%p)\n", hImc);
 
     if (hImc == NULL)
         return NULL;
@@ -1145,7 +1677,7 @@ VOID WINAPI ImmUnlockClientImc(PCLIENTIMC pClientImc)
     LONG cLocks;
     HIMC hImc;
 
-    TRACE("ImmUnlockClientImc(%p)\n", pClientImc);
+    TRACE("(%p)\n", pClientImc);
 
     cLocks = InterlockedDecrement(&pClientImc->cLockObj);
     if (cLocks != 0 || !(pClientImc->dwFlags & CLIENTIMC_UNKNOWN1))
@@ -1511,7 +2043,7 @@ BOOL WINAPI ImmGetCandidateWindow(
     LPINPUTCONTEXT pIC;
     LPCANDIDATEFORM pCF;
 
-    TRACE("ImmGetCandidateWindow(%p, %lu, %p)\n", hIMC, dwIndex, lpCandidate);
+    TRACE("(%p, %lu, %p)\n", hIMC, dwIndex, lpCandidate);
 
     pIC = ImmLockIMC(hIMC);
     if (pIC  == NULL)
@@ -1561,7 +2093,7 @@ BOOL WINAPI ImmGetCompositionFontA(HIMC hIMC, LPLOGFONTA lplf)
     BOOL ret = FALSE, bWide;
     LPINPUTCONTEXT pIC;
 
-    TRACE("ImmGetCompositionFontA(%p, %p)\n", hIMC, lplf);
+    TRACE("(%p, %p)\n", hIMC, lplf);
 
     pClientImc = ImmLockClientImc(hIMC);
     if (pClientImc == NULL)
@@ -1598,7 +2130,7 @@ BOOL WINAPI ImmGetCompositionFontW(HIMC hIMC, LPLOGFONTW lplf)
     LPINPUTCONTEXT pIC;
     BOOL ret = FALSE;
 
-    TRACE("ImmGetCompositionFontW(%p, %p)\n", hIMC, lplf);
+    TRACE("(%p, %p)\n", hIMC, lplf);
 
     pClientImc = ImmLockClientImc(hIMC);
     if (pClientImc == NULL)
@@ -1923,7 +2455,7 @@ BOOL WINAPI ImmGetCompositionWindow(HIMC hIMC, LPCOMPOSITIONFORM lpCompForm)
     LPINPUTCONTEXT pIC;
     BOOL ret = FALSE;
 
-    TRACE("ImmGetCompositionWindow(%p, %p)\n", hIMC, lpCompForm);
+    TRACE("(%p, %p)\n", hIMC, lpCompForm);
 
     pIC = ImmLockIMC(hIMC);
     if (!pIC)
@@ -2056,7 +2588,7 @@ BOOL WINAPI ImmGetConversionStatus(
 {
     LPINPUTCONTEXT pIC;
 
-    TRACE("ImmGetConversionStatus(%p %p %p)\n", hIMC, lpfdwConversion, lpfdwSentence);
+    TRACE("(%p %p %p)\n", hIMC, lpfdwConversion, lpfdwSentence);
 
     pIC = ImmLockIMC(hIMC);
     if (!pIC)
@@ -2167,7 +2699,7 @@ void WINAPI __wine_unregister_window(HWND hwnd)
  */
 HWND WINAPI ImmGetDefaultIMEWnd(HWND hWnd)
 {
-    if (!(g_dwImm32Flags & IMM32_FLAG_UNKNOWN))
+    if (!g_psi || !(g_psi->dwSRVIFlags & SRVINFO_IMM32))
         return NULL;
 
     if (hWnd == NULL)
@@ -2181,7 +2713,7 @@ HWND WINAPI ImmGetDefaultIMEWnd(HWND hWnd)
  */
 BOOL WINAPI CtfImmIsCiceroEnabled(VOID)
 {
-    return !!(g_dwImm32Flags & IMM32_FLAG_CICERO_ENABLED);
+    return (g_psi && (g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED));
 }
 
 /***********************************************************************
@@ -2193,7 +2725,7 @@ UINT WINAPI ImmGetDescriptionA(
     IMEINFOEX info;
     size_t cch;
 
-    TRACE("ImmGetDescriptionA(%p,%p,%d)\n", hKL, lpszDescription, uBufLen);
+    TRACE("(%p,%p,%d)\n", hKL, lpszDescription, uBufLen);
 
     if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL) || !IS_IME_HKL(hKL))
         return 0;
@@ -2214,7 +2746,7 @@ UINT WINAPI ImmGetDescriptionW(HKL hKL, LPWSTR lpszDescription, UINT uBufLen)
     IMEINFOEX info;
     size_t cch;
 
-    TRACE("ImmGetDescriptionW(%p, %p, %d)\n", hKL, lpszDescription, uBufLen);
+    TRACE("(%p, %p, %d)\n", hKL, lpszDescription, uBufLen);
 
     if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL) || !IS_IME_HKL(hKL))
         return 0;
@@ -2226,17 +2758,184 @@ UINT WINAPI ImmGetDescriptionW(HKL hKL, LPWSTR lpszDescription, UINT uBufLen)
     return (UINT)cch;
 }
 
+static DWORD APIENTRY
+ImmGetGuideLineAW(HIMC hIMC, DWORD dwIndex, LPVOID lpBuf, DWORD dwBufLen, BOOL bAnsi)
+{
+    PCLIENTIMC pClientImc;
+    LPINPUTCONTEXT pIC;
+    LPGUIDELINE pGuideLine;
+    DWORD cb, ret = 0;
+    LPVOID pvStr, pvPrivate;
+    BOOL bUsedDefault;
+
+    pClientImc = ImmLockClientImc(hIMC);
+    if (!pClientImc)
+        return 0;
+
+    pIC = ImmLockIMC(hIMC);
+    if (!pIC)
+    {
+        ImmUnlockClientImc(pClientImc);
+        return 0;
+    }
+
+    pGuideLine = ImmLockIMCC(pIC->hGuideLine);
+    if (!pGuideLine)
+    {
+        ImmUnlockIMC(hIMC);
+        ImmUnlockClientImc(pClientImc);
+        return 0;
+    }
+
+    if (dwIndex == GGL_LEVEL)
+    {
+        ret = pGuideLine->dwLevel;
+        goto Quit;
+    }
+
+    if (dwIndex == GGL_INDEX)
+    {
+        ret = pGuideLine->dwIndex;
+        goto Quit;
+    }
+
+    if (dwIndex == GGL_STRING)
+    {
+        pvStr = (LPBYTE)pGuideLine + pGuideLine->dwStrOffset;
+
+        /* get size */
+        if (bAnsi)
+        {
+            if (pClientImc->dwFlags & CLIENTIMC_WIDE)
+            {
+                cb = WideCharToMultiByte(CP_ACP, 0, pvStr, pGuideLine->dwStrLen,
+                                         NULL, 0, NULL, &bUsedDefault);
+            }
+            else
+            {
+                cb = pGuideLine->dwStrLen * sizeof(CHAR);
+            }
+        }
+        else
+        {
+            if (pClientImc->dwFlags & CLIENTIMC_WIDE)
+            {
+                cb = pGuideLine->dwStrLen * sizeof(WCHAR);
+            }
+            else
+            {
+                cb = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pvStr, pGuideLine->dwStrLen,
+                                         NULL, 0) * sizeof(WCHAR);
+            }
+        }
+
+        if (dwBufLen == 0 || cb == 0 || lpBuf == NULL || dwBufLen < cb)
+        {
+            ret = cb;
+            goto Quit;
+        }
+
+        /* store to buffer */
+        if (bAnsi)
+        {
+            if (pClientImc->dwFlags & CLIENTIMC_WIDE)
+            {
+                ret = WideCharToMultiByte(CP_ACP, 0, pvStr, pGuideLine->dwStrLen,
+                                          lpBuf, dwBufLen, NULL, &bUsedDefault);
+                goto Quit;
+            }
+        }
+        else
+        {
+            if (!(pClientImc->dwFlags & CLIENTIMC_WIDE))
+            {
+                ret = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pvStr, pGuideLine->dwStrLen,
+                                          lpBuf, dwBufLen) * sizeof(WCHAR);
+                goto Quit;
+            }
+        }
+
+        RtlCopyMemory(lpBuf, pvStr, cb);
+        ret = cb;
+        goto Quit;
+    }
+
+    if (dwIndex == GGL_PRIVATE)
+    {
+        pvPrivate = (LPBYTE)pGuideLine + pGuideLine->dwPrivateOffset;
+
+        /* get size */
+        if (bAnsi)
+        {
+            if ((pClientImc->dwFlags & CLIENTIMC_WIDE) &&
+                pGuideLine->dwIndex == GL_ID_REVERSECONVERSION)
+            {
+                cb = CandidateListWideToAnsi(pvPrivate, NULL, 0, CP_ACP);
+            }
+            else
+            {
+                cb = pGuideLine->dwPrivateSize;
+            }
+        }
+        else
+        {
+            if (!(pClientImc->dwFlags & CLIENTIMC_WIDE) &&
+                pGuideLine->dwIndex == GL_ID_REVERSECONVERSION)
+            {
+                cb = CandidateListAnsiToWide(pvPrivate, NULL, 0, CP_ACP);
+            }
+            else
+            {
+                cb = pGuideLine->dwPrivateSize;
+            }
+        }
+
+        if (dwBufLen == 0 || cb == 0 || lpBuf == NULL || dwBufLen < cb)
+        {
+            ret = cb;
+            goto Quit;
+        }
+
+        /* store to buffer */
+        if (bAnsi)
+        {
+            if ((pClientImc->dwFlags & CLIENTIMC_WIDE) &&
+                pGuideLine->dwIndex == GL_ID_REVERSECONVERSION)
+            {
+                ret = CandidateListWideToAnsi(pvPrivate, lpBuf, cb, CP_ACP);
+                goto Quit;
+            }
+        }
+        else
+        {
+            if (!(pClientImc->dwFlags & CLIENTIMC_WIDE) &&
+                pGuideLine->dwIndex == GL_ID_REVERSECONVERSION)
+            {
+                ret = CandidateListAnsiToWide(pvPrivate, lpBuf, cb, CP_ACP);
+                goto Quit;
+            }
+        }
+
+        RtlCopyMemory(lpBuf, pvPrivate, cb);
+        ret = cb;
+        goto Quit;
+    }
+
+Quit:
+    ImmUnlockIMCC(pIC->hGuideLine);
+    ImmUnlockIMC(hIMC);
+    ImmUnlockClientImc(pClientImc);
+    return ret;
+}
+
 /***********************************************************************
  *		ImmGetGuideLineA (IMM32.@)
  */
 DWORD WINAPI ImmGetGuideLineA(
   HIMC hIMC, DWORD dwIndex, LPSTR lpBuf, DWORD dwBufLen)
 {
-  FIXME("(%p, %d, %s, %d): stub\n",
-    hIMC, dwIndex, debugstr_a(lpBuf), dwBufLen
-  );
-  SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-  return 0;
+    TRACE("(%p, %lu, %p, %lu)\n", hIMC, dwIndex, lpBuf, dwBufLen);
+    return ImmGetGuideLineAW(hIMC, dwIndex, lpBuf, dwBufLen, TRUE);
 }
 
 /***********************************************************************
@@ -2244,11 +2943,8 @@ DWORD WINAPI ImmGetGuideLineA(
  */
 DWORD WINAPI ImmGetGuideLineW(HIMC hIMC, DWORD dwIndex, LPWSTR lpBuf, DWORD dwBufLen)
 {
-  FIXME("(%p, %d, %s, %d): stub\n",
-    hIMC, dwIndex, debugstr_w(lpBuf), dwBufLen
-  );
-  SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-  return 0;
+    TRACE("(%p, %lu, %p, %lu)\n", hIMC, dwIndex, lpBuf, dwBufLen);
+    return ImmGetGuideLineAW(hIMC, dwIndex, lpBuf, dwBufLen, FALSE);
 }
 
 /***********************************************************************
@@ -2260,7 +2956,7 @@ UINT WINAPI ImmGetIMEFileNameA( HKL hKL, LPSTR lpszFileName, UINT uBufLen)
     IMEINFOEX info;
     size_t cch;
 
-    TRACE("ImmGetIMEFileNameA(%p, %p, %u)\n", hKL, lpszFileName, uBufLen);
+    TRACE("(%p, %p, %u)\n", hKL, lpszFileName, uBufLen);
 
     if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL) || !IS_IME_HKL(hKL))
     {
@@ -2291,7 +2987,7 @@ UINT WINAPI ImmGetIMEFileNameW(HKL hKL, LPWSTR lpszFileName, UINT uBufLen)
     IMEINFOEX info;
     size_t cch;
 
-    TRACE("ImmGetIMEFileNameW(%p, %p, %u)\n", hKL, lpszFileName, uBufLen);
+    TRACE("(%p, %p, %u)\n", hKL, lpszFileName, uBufLen);
 
     if (!ImmGetImeInfoEx(&info, ImeInfoExKeyboardLayout, &hKL) || !IS_IME_HKL(hKL))
     {
@@ -2321,7 +3017,7 @@ BOOL WINAPI ImmGetOpenStatus(HIMC hIMC)
     BOOL ret;
     LPINPUTCONTEXT pIC;
 
-    TRACE("ImmGetOpenStatus(%p)\n", hIMC);
+    TRACE("(%p)\n", hIMC);
 
     if (!hIMC)
         return FALSE;
@@ -2428,7 +3124,7 @@ BOOL WINAPI ImmGetStatusWindowPos(HIMC hIMC, LPPOINT lpptPos)
     LPINPUTCONTEXT pIC;
     BOOL ret;
 
-    TRACE("ImmGetStatusWindowPos(%p, %p)\n", hIMC, lpptPos);
+    TRACE("(%p, %p)\n", hIMC, lpptPos);
 
     pIC = ImmLockIMC(hIMC);
     if (pIC == NULL)
@@ -2474,21 +3170,33 @@ UINT WINAPI ImmGetVirtualKey(HWND hWnd)
 HKL WINAPI ImmInstallIMEA(
   LPCSTR lpszIMEFileName, LPCSTR lpszLayoutText)
 {
-    LPWSTR lpszwIMEFileName;
-    LPWSTR lpszwLayoutText;
-    HKL hkl;
+    INT cchFileName, cchLayoutText;
+    LPWSTR pszFileNameW, pszLayoutTextW;
+    HKL hKL;
 
-    TRACE ("(%s, %s)\n", debugstr_a(lpszIMEFileName),
-                         debugstr_a(lpszLayoutText));
+    TRACE("(%s, %s)\n", debugstr_a(lpszIMEFileName), debugstr_a(lpszLayoutText));
 
-    lpszwIMEFileName = strdupAtoW(lpszIMEFileName);
-    lpszwLayoutText = strdupAtoW(lpszLayoutText);
+    cchFileName = lstrlenA(lpszIMEFileName) + 1;
+    cchLayoutText = lstrlenA(lpszLayoutText) + 1;
 
-    hkl = ImmInstallIMEW(lpszwIMEFileName, lpszwLayoutText);
+    pszFileNameW = Imm32HeapAlloc(0, cchFileName * sizeof(WCHAR));
+    if (pszFileNameW == NULL)
+        return NULL;
 
-    HeapFree(GetProcessHeap(),0,lpszwIMEFileName);
-    HeapFree(GetProcessHeap(),0,lpszwLayoutText);
-    return hkl;
+    pszLayoutTextW = Imm32HeapAlloc(0, cchLayoutText * sizeof(WCHAR));
+    if (pszLayoutTextW == NULL)
+    {
+        HeapFree(g_hImm32Heap, 0, pszFileNameW);
+        return NULL;
+    }
+
+    MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, lpszIMEFileName, -1, pszFileNameW, cchFileName);
+    MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, lpszLayoutText, -1, pszLayoutTextW, cchLayoutText);
+
+    hKL = ImmInstallIMEW(pszFileNameW, pszLayoutTextW);
+    HeapFree(g_hImm32Heap, 0, pszFileNameW);
+    HeapFree(g_hImm32Heap, 0, pszLayoutTextW);
+    return hKL;
 }
 
 /***********************************************************************
@@ -2555,7 +3263,7 @@ HKL WINAPI ImmInstallIMEW(
 BOOL WINAPI ImmIsIME(HKL hKL)
 {
     IMEINFOEX info;
-    TRACE("ImmIsIME(%p)\n", hKL);
+    TRACE("(%p)\n", hKL);
     return !!ImmGetImeInfoEx(&info, ImeInfoExImeWindow, &hKL);
 }
 
@@ -2609,23 +3317,29 @@ BOOL WINAPI ImmIsUIMessageW(
 BOOL WINAPI ImmNotifyIME(
   HIMC hIMC, DWORD dwAction, DWORD dwIndex, DWORD dwValue)
 {
-    InputContextData *data = get_imc_data(hIMC);
+    DWORD dwImeThreadId, dwThreadId;
+    HKL hKL;
+    PIMEDPI pImeDpi;
+    BOOL ret;
 
-    TRACE("(%p, %d, %d, %d)\n",
-        hIMC, dwAction, dwIndex, dwValue);
+    TRACE("(%p, %lu, %lu, %lu)\n", hIMC, dwAction, dwIndex, dwValue);
 
-    if (hIMC == NULL)
+    if (hIMC)
     {
-        SetLastError(ERROR_SUCCESS);
-        return FALSE;
+        dwImeThreadId = Imm32QueryWindow(hIMC, QUERY_WINDOW_UNIQUE_THREAD_ID);
+        dwThreadId = GetCurrentThreadId();
+        if (dwImeThreadId != dwThreadId)
+            return FALSE;
     }
 
-    if (!data || ! data->immKbd->pNotifyIME)
-    {
+    hKL = GetKeyboardLayout(0);
+    pImeDpi = ImmLockImeDpi(hKL);
+    if (pImeDpi == NULL)
         return FALSE;
-    }
 
-    return data->immKbd->pNotifyIME(hIMC,dwAction,dwIndex,dwValue);
+    ret = pImeDpi->NotifyIME(hIMC, dwAction, dwIndex, dwValue);
+    ImmUnlockImeDpi(pImeDpi);
+    return ret;
 }
 
 /***********************************************************************
@@ -2933,38 +3647,28 @@ BOOL WINAPI ImmSetCompositionStringW(
 BOOL WINAPI ImmSetCompositionWindow(
   HIMC hIMC, LPCOMPOSITIONFORM lpCompForm)
 {
-    BOOL reshow = FALSE;
-    InputContextData *data = get_imc_data(hIMC);
+    DWORD dwImeThreadId, dwThreadId;
+    LPINPUTCONTEXT pIC;
+    HWND hWnd;
 
-    TRACE("(%p, %p)\n", hIMC, lpCompForm);
-    if (lpCompForm)
-        TRACE("\t%x, %s, %s\n", lpCompForm->dwStyle,
-              wine_dbgstr_point(&lpCompForm->ptCurrentPos),
-              wine_dbgstr_rect(&lpCompForm->rcArea));
-
-    if (!data)
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
-    }
-
-    if (IMM_IsCrossThreadAccess(NULL, hIMC))
+    dwImeThreadId = NtUserQueryInputContext(hIMC, 1);
+    dwThreadId = GetCurrentThreadId();
+    if (dwImeThreadId != dwThreadId)
         return FALSE;
 
-    data->IMC.cfCompForm = *lpCompForm;
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return FALSE;
 
-    if (IsWindowVisible(data->immKbd->UIWnd))
-    {
-        reshow = TRUE;
-        ShowWindow(data->immKbd->UIWnd,SW_HIDE);
-    }
+    pIC->cfCompForm = *lpCompForm;
+    pIC->fdwInit |= INIT_COMPFORM;
 
-    /* FIXME: this is a partial stub */
+    hWnd = pIC->hWnd;
 
-    if (reshow)
-        ShowWindow(data->immKbd->UIWnd,SW_SHOWNOACTIVATE);
+    ImmUnlockIMC(hIMC);
 
-    ImmInternalSendIMENotify(data, IMN_SETCOMPOSITIONWINDOW, 0);
+    Imm32NotifyAction(hIMC, hWnd, NI_CONTEXTUPDATED, 0,
+                      IMC_SETCOMPOSITIONWINDOW, IMN_SETCOMPOSITIONWINDOW, 0);
     return TRUE;
 }
 
@@ -2974,33 +3678,61 @@ BOOL WINAPI ImmSetCompositionWindow(
 BOOL WINAPI ImmSetConversionStatus(
   HIMC hIMC, DWORD fdwConversion, DWORD fdwSentence)
 {
-    DWORD oldConversion, oldSentence;
-    InputContextData *data = get_imc_data(hIMC);
+    HKL hKL;
+    LPINPUTCONTEXT pIC;
+    DWORD dwImeThreadId, dwThreadId, dwOldConversion, dwOldSentence;
+    BOOL fConversionChange = FALSE, fSentenceChange = FALSE;
+    HWND hWnd;
 
-    TRACE("%p %d %d\n", hIMC, fdwConversion, fdwSentence);
+    TRACE("(%p, 0x%lX, 0x%lX)\n", hIMC, fdwConversion, fdwSentence);
 
-    if (!data)
+    hKL = GetKeyboardLayout(0);
+    if (!IS_IME_HKL(hKL))
     {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
+        if (g_psi && (g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED))
+        {
+            FIXME("Cicero\n");
+            return FALSE;
+        }
     }
 
-    if (IMM_IsCrossThreadAccess(NULL, hIMC))
+    dwImeThreadId = Imm32QueryInputContext(hIMC, 1);
+    dwThreadId = GetCurrentThreadId();
+    if (dwImeThreadId != dwThreadId)
         return FALSE;
 
-    if ( fdwConversion != data->IMC.fdwConversion )
+    pIC = ImmLockIMC(hIMC);
+    if (pIC == NULL)
+        return FALSE;
+
+    if (pIC->fdwConversion != fdwConversion)
     {
-        oldConversion = data->IMC.fdwConversion;
-        data->IMC.fdwConversion = fdwConversion;
-        ImmNotifyIME(hIMC, NI_CONTEXTUPDATED, oldConversion, IMC_SETCONVERSIONMODE);
-        ImmInternalSendIMENotify(data, IMN_SETCONVERSIONMODE, 0);
+        dwOldConversion = pIC->fdwConversion;
+        pIC->fdwConversion = fdwConversion;
+        fConversionChange = TRUE;
     }
-    if ( fdwSentence != data->IMC.fdwSentence )
+
+    if (pIC->fdwSentence != fdwSentence)
     {
-        oldSentence = data->IMC.fdwSentence;
-        data->IMC.fdwSentence = fdwSentence;
-        ImmNotifyIME(hIMC, NI_CONTEXTUPDATED, oldSentence, IMC_SETSENTENCEMODE);
-        ImmInternalSendIMENotify(data, IMN_SETSENTENCEMODE, 0);
+        dwOldSentence = pIC->fdwSentence;
+        pIC->fdwSentence = fdwSentence;
+        fSentenceChange = TRUE;
+    }
+
+    hWnd = pIC->hWnd;
+    ImmUnlockIMC(hIMC);
+
+    if (fConversionChange)
+    {
+        Imm32NotifyAction(hIMC, hWnd, NI_CONTEXTUPDATED, dwOldConversion,
+                          IMC_SETCONVERSIONMODE, IMN_SETCONVERSIONMODE, 0);
+        Imm32NotifyIMEStatus(hWnd, hIMC, fdwConversion);
+    }
+
+    if (fSentenceChange)
+    {
+        Imm32NotifyAction(hIMC, hWnd, NI_CONTEXTUPDATED, dwOldSentence,
+                          IMC_SETSENTENCEMODE, IMN_SETSENTENCEMODE, 0);
     }
 
     return TRUE;
@@ -3013,7 +3745,7 @@ PIMEDPI WINAPI ImmLockImeDpi(HKL hKL)
 {
     PIMEDPI pImeDpi = NULL;
 
-    TRACE("ImmLockImeDpi(%p)\n", hKL);
+    TRACE("(%p)\n", hKL);
 
     RtlEnterCriticalSection(&g_csImeDpi);
 
@@ -3042,7 +3774,7 @@ VOID WINAPI ImmUnlockImeDpi(PIMEDPI pImeDpi)
 {
     PIMEDPI *ppEntry;
 
-    TRACE("ImmUnlockImeDpi(%p)\n", pImeDpi);
+    TRACE("(%p)\n", pImeDpi);
 
     if (pImeDpi == NULL)
         return;
@@ -3059,8 +3791,8 @@ VOID WINAPI ImmUnlockImeDpi(PIMEDPI pImeDpi)
 
     if ((pImeDpi->dwFlags & IMEDPI_FLAG_UNKNOWN) == 0)
     {
-        if ((pImeDpi->dwFlags & IMEDPI_FLAG_UNKNOWN2) == 0 ||
-            (pImeDpi->dwUnknown1 & 1) == 0)
+        if ((pImeDpi->dwFlags & IMEDPI_FLAG_LOCKED) == 0 ||
+            (pImeDpi->ImeInfo.fdwProperty & IME_PROP_END_UNLOAD) == 0)
         {
             RtlLeaveCriticalSection(&g_csImeDpi);
             return;
@@ -3088,16 +3820,16 @@ VOID WINAPI ImmUnlockImeDpi(PIMEDPI pImeDpi)
  */
 BOOL WINAPI ImmSetOpenStatus(HIMC hIMC, BOOL fOpen)
 {
-    DWORD idImeThread, idThread, dwConversion;
+    DWORD dwImeThreadId, dwThreadId, dwConversion;
     LPINPUTCONTEXT pIC;
     HWND hWnd;
     BOOL bHasChange = FALSE;
 
-    TRACE("ImmSetOpenStatus(%p, %d)\n", hIMC, fOpen);
+    TRACE("(%p, %d)\n", hIMC, fOpen);
 
-    idImeThread = Imm32QueryInputContext(hIMC, 1);
-    idThread = GetCurrentThreadId();
-    if (idImeThread != idThread)
+    dwImeThreadId = Imm32QueryInputContext(hIMC, 1);
+    dwThreadId = GetCurrentThreadId();
+    if (dwImeThreadId != dwThreadId)
         return FALSE;
 
     pIC = ImmLockIMC(hIMC);
@@ -3129,25 +3861,29 @@ BOOL WINAPI ImmSetOpenStatus(HIMC hIMC, BOOL fOpen)
  */
 BOOL WINAPI ImmSetStatusWindowPos(HIMC hIMC, LPPOINT lpptPos)
 {
-    InputContextData *data = get_imc_data(hIMC);
+    LPINPUTCONTEXT pIC;
+    HWND hWnd;
+    DWORD dwImeThreadId, dwThreadId;
 
-    TRACE("(%p, %p)\n", hIMC, lpptPos);
+    TRACE("(%p, {%ld, %ld})\n", hIMC, lpptPos->x, lpptPos->y);
 
-    if (!data || !lpptPos)
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return FALSE;
-    }
-
-    if (IMM_IsCrossThreadAccess(NULL, hIMC))
+    dwImeThreadId = Imm32QueryInputContext(hIMC, 1);
+    dwThreadId = GetCurrentThreadId();
+    if (dwImeThreadId != dwThreadId)
         return FALSE;
 
-    TRACE("\t%s\n", wine_dbgstr_point(lpptPos));
+    pIC = ImmLockIMC(hIMC);
+    if (!pIC)
+        return FALSE;
 
-    data->IMC.ptStatusWndPos = *lpptPos;
-    ImmNotifyIME( hIMC, NI_CONTEXTUPDATED, 0, IMC_SETSTATUSWINDOWPOS);
-    ImmInternalSendIMENotify(data, IMN_SETSTATUSWINDOWPOS, 0);
+    hWnd = pIC->hWnd;
+    pIC->ptStatusWndPos = *lpptPos;
+    pIC->fdwInit |= INIT_STATUSWNDPOS;
 
+    ImmUnlockIMC(hIMC);
+
+    Imm32NotifyAction(hIMC, hWnd, NI_CONTEXTUPDATED, 0,
+                      IMC_SETSTATUSWINDOWPOS, IMN_SETSTATUSWINDOWPOS, 0);
     return TRUE;
 }
 
@@ -3186,9 +3922,19 @@ BOOL WINAPI ImmShowSoftKeyboard(HWND hSoftWnd, int nCmdShow)
  */
 BOOL WINAPI ImmSimulateHotKey(HWND hWnd, DWORD dwHotKeyID)
 {
-  FIXME("(%p, %d): stub\n", hWnd, dwHotKeyID);
-  SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-  return FALSE;
+    HIMC hIMC;
+    DWORD dwThreadId;
+    HKL hKL;
+    BOOL ret;
+
+    TRACE("(%p, 0x%lX)\n", hWnd, dwHotKeyID);
+
+    hIMC = ImmGetContext(hWnd);
+    dwThreadId = GetWindowThreadProcessId(hWnd, NULL);
+    hKL = GetKeyboardLayout(dwThreadId);
+    ret = Imm32ProcessHotKey(hWnd, hIMC, hKL, dwHotKeyID);
+    ImmReleaseContext(hWnd, hIMC);
+    return ret;
 }
 
 /***********************************************************************
@@ -3668,7 +4414,7 @@ BOOL WINAPI ImmProcessKey(HWND hwnd, HKL hKL, UINT vKey, LPARAM lKeyData, DWORD 
 /***********************************************************************
 *		ImmDisableTextFrameService(IMM32.@)
 */
-BOOL WINAPI ImmDisableTextFrameService(DWORD idThread)
+BOOL WINAPI ImmDisableTextFrameService(DWORD dwThreadId)
 {
     FIXME("Stub\n");
     return FALSE;
@@ -3677,11 +4423,29 @@ BOOL WINAPI ImmDisableTextFrameService(DWORD idThread)
 /***********************************************************************
  *              ImmEnumInputContext(IMM32.@)
  */
-
-BOOL WINAPI ImmEnumInputContext(DWORD idThread, IMCENUMPROC lpfn, LPARAM lParam)
+BOOL WINAPI ImmEnumInputContext(DWORD dwThreadId, IMCENUMPROC lpfn, LPARAM lParam)
 {
-    FIXME("Stub\n");
-    return FALSE;
+    HIMC *phList;
+    DWORD dwIndex, dwCount;
+    BOOL ret = TRUE;
+    HIMC hIMC;
+
+    TRACE("(%lu, %p, %p)\n", dwThreadId, lpfn, lParam);
+
+    dwCount = Imm32AllocAndBuildHimcList(dwThreadId, &phList);
+    if (!dwCount)
+        return FALSE;
+
+    for (dwIndex = 0; dwIndex < dwCount; ++dwIndex)
+    {
+        hIMC = phList[dwIndex];
+        ret = (*lpfn)(hIMC, lParam);
+        if (!ret)
+            break;
+    }
+
+    HeapFree(g_hImm32Heap, 0, phList);
+    return ret;
 }
 
 /***********************************************************************
@@ -3736,11 +4500,11 @@ BOOL WINAPI ImmSetActiveContextConsoleIME(HWND hwnd, BOOL fFlag)
 *		ImmRegisterClient(IMM32.@)
 *       ( Undocumented, called from user32.dll )
 */
-BOOL WINAPI ImmRegisterClient(PVOID ptr, /* FIXME: should point to SHAREDINFO structure */
-                              HINSTANCE hMod)
+BOOL WINAPI ImmRegisterClient(PSHAREDINFO ptr, HINSTANCE hMod)
 {
-    FIXME("Stub\n");
-    return TRUE;
+    g_SharedInfo = *ptr;
+    g_psi = g_SharedInfo.psi;
+    return Imm32InitInstance(hMod);
 }
 
 /***********************************************************************
@@ -3793,7 +4557,7 @@ ImmGetImeInfoEx(PIMEINFOEX pImeInfoEx,
 
     if (!IS_IME_HKL(hKL))
     {
-        if (g_dwImm32Flags & IMM32_FLAG_CICERO_ENABLED)
+        if (g_psi && (g_psi->dwSRVIFlags & SRVINFO_CICERO_ENABLED))
         {
             pTeb = NtCurrentTeb();
             if (((PW32CLIENTINFO)pTeb->Win32ClientInfo)->W32ClientInfo[0] & 2)
@@ -3806,4 +4570,54 @@ ImmGetImeInfoEx(PIMEINFOEX pImeInfoEx,
 
 Quit:
     return Imm32GetImeInfoEx(pImeInfoEx, SearchType);
+}
+
+BOOL WINAPI User32InitializeImmEntryTable(DWORD);
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
+{
+    HKL hKL;
+    HWND hWnd;
+    PTEB pTeb;
+
+    TRACE("(%p, 0x%X, %p)\n", hinstDLL, fdwReason, lpReserved);
+
+    switch (fdwReason)
+    {
+        case DLL_PROCESS_ATTACH:
+            //Imm32GenerateRandomSeed(hinstDLL, 1, lpReserved); // Non-sense
+            if (!Imm32InitInstance(hinstDLL))
+            {
+                ERR("Imm32InitInstance failed\n");
+                return FALSE;
+            }
+            if (!User32InitializeImmEntryTable(IMM_INIT_MAGIC))
+            {
+                ERR("User32InitializeImmEntryTable failed\n");
+                return FALSE;
+            }
+            break;
+
+        case DLL_THREAD_ATTACH:
+            break;
+
+        case DLL_THREAD_DETACH:
+            if (g_psi == NULL || !(g_psi->dwSRVIFlags & SRVINFO_IMM32))
+                return TRUE;
+
+            pTeb = NtCurrentTeb();
+            if (pTeb->Win32ThreadInfo == NULL)
+                return TRUE;
+
+            hKL = GetKeyboardLayout(0);
+            hWnd = (HWND)Imm32GetThreadState(THREADSTATE_CAPTUREWINDOW);
+            Imm32CleanupContext(hWnd, hKL, TRUE);
+            break;
+
+        case DLL_PROCESS_DETACH:
+            RtlDeleteCriticalSection(&g_csImeDpi);
+            break;
+    }
+
+    return TRUE;
 }

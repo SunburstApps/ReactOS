@@ -3,6 +3,7 @@ list(APPEND LIBCNTPR_MATH_SOURCE
     math/abs.c
     math/div.c
     math/labs.c
+    math/usermatherr.c
 )
 
 if(ARCH STREQUAL "i386")
@@ -72,12 +73,19 @@ elseif(ARCH STREQUAL "amd64")
 elseif(ARCH STREQUAL "arm")
     list(APPEND LIBCNTPR_MATH_SOURCE
         math/cos.c
+        math/floorf.c
         math/sin.c
         math/sqrt.c
         math/arm/__rt_sdiv.c
         math/arm/__rt_sdiv64_worker.c
         math/arm/__rt_udiv.c
         math/arm/__rt_udiv64_worker.c
+        math/arm/__rt_div_worker.h
+        math/arm/__dtoi64.c
+        math/arm/__dtou64.c
+        math/arm/__stoi64.c
+        math/arm/__stou64.c
+        math/arm/__fto64.h
     )
     list(APPEND CRT_MATH_SOURCE
         math/fabsf.c
@@ -95,12 +103,8 @@ elseif(ARCH STREQUAL "arm")
         math/arm/log10.s
         math/arm/pow.s
         math/arm/tan.s
-        math/arm/__dtoi64.s
-        math/arm/__dtou64.s
         math/arm/__i64tod.s
         math/arm/__i64tos.s
-        math/arm/__stoi64.s
-        math/arm/__stou64.s
         math/arm/__u64tod.s
         math/arm/__u64tos.s
         math/arm/__rt_sdiv64.s
@@ -125,7 +129,6 @@ if(NOT ARCH STREQUAL "i386")
         math/cos.c
         math/coshf.c
         math/expf.c
-        math/floorf.c
         math/fmodf.c
         math/log10f.c
         math/modff.c
